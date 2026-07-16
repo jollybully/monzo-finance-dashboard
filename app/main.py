@@ -14,7 +14,7 @@ from app.config import get_settings
 from app.database import SessionLocal, init_db
 from app.routers import api, dashboard, settings as settings_router
 from app.services.balance import get_or_create_settings
-from app.services.reports import generate_and_send_report
+from app.services.reports import catch_up_missed_reports, generate_and_send_report
 from app.services.sheets_sync import sync_transactions
 
 logging.basicConfig(level=logging.INFO)
@@ -111,6 +111,19 @@ async def lifespan(_: FastAPI):
     _configure_scheduler()
     scheduler.start()
     logger.info("Scheduler started")
+
+    db = SessionLocal()
+    try:
+        caught = catch_up_missed_reports(db)
+        if caught:
+            logger.info("Catch-up sent: %s", ", ".join(caught))
+        else:
+            logger.info("Catch-up: nothing due")
+    except Exception:
+        logger.exception("Catch-up failed")
+    finally:
+        db.close()
+
     yield
     scheduler.shutdown(wait=False)
     logger.info("Scheduler stopped")

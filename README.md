@@ -61,6 +61,8 @@ safe_daily = available / days until payday
 
 Mute daily email with `REPORT_DAILY_EMAIL=false` (Pushover still sends). Times follow `APP_TZ`.
 
+If the machine was asleep through a scheduled slot, startup catch-up sends **at most one** missed digest per cadence (daily same day within 18h; weekly Mon–Wed; monthly days 1–3). It does not backfill a multi-day backlog.
+
 ## API
 
 - `GET /health`

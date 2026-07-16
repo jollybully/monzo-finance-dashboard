@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import logging
 from calendar import monthrange
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy.orm import Session
@@ -260,6 +261,73 @@ def build_monthly_report(
     push_body = "\n".join(push_lines)
 
     return subject, html, text, start, end, push_title, push_body, priority
+
+
+def _already_sent(
+    db: Session, period: str, period_start: date, period_end: date
+) -> bool:
+    return (
+        db.query(ReportRun)
+        .filter(
+            ReportRun.period == period,
+            ReportRun.period_start == period_start,
+            ReportRun.period_end == period_end,
+            ReportRun.status == "sent",
+        )
+        .first()
+        is not None
+    )
+
+
+def catch_up_missed_reports(db: Session) -> list[str]:
+    """Send at most one missed digest per cadence after downtime.
+
+    Never backfills a multi-day backlog — only the current slot, within a
+    short grace window after the scheduled time.
+    """
+    cfg = get_settings()
+    tz = ZoneInfo(cfg.app_tz)
+    now = datetime.now(tz)
+    today = now.date()
+    caught: list[str] = []
+
+    def _send(period: str) -> None:
+        run = generate_and_send_report(db, period, send=True, today=today)
+        msg = f"{period}={run.status}"
+        caught.append(msg)
+        logger.info("Catch-up %s report: id=%s status=%s", period, run.id, run.status)
+
+    if cfg.report_daily_enabled:
+        scheduled = datetime.combine(
+            today, time(cfg.report_daily_hour, cfg.report_daily_minute), tzinfo=tz
+        )
+        # Same calendar day only, up to 18h after the slot
+        if now >= scheduled and (now - scheduled) <= timedelta(hours=18):
+            yesterday = today - timedelta(days=1)
+            if not _already_sent(db, "daily", yesterday, yesterday):
+                _send("daily")
+
+    if cfg.report_weekly_enabled and today.weekday() <= 2:  # Mon–Wed
+        monday = today - timedelta(days=today.weekday())
+        scheduled = datetime.combine(
+            monday, time(cfg.report_weekly_hour, cfg.report_weekly_minute), tzinfo=tz
+        )
+        if now >= scheduled:
+            start, end = _week_bounds(today)
+            if not _already_sent(db, "weekly", start, end):
+                _send("weekly")
+
+    if cfg.report_monthly_enabled and today.day <= 3:
+        first = today.replace(day=1)
+        scheduled = datetime.combine(
+            first, time(cfg.report_monthly_hour, cfg.report_monthly_minute), tzinfo=tz
+        )
+        if now >= scheduled:
+            start, end = _month_bounds_for_report(today)
+            if not _already_sent(db, "monthly", start, end):
+                _send("monthly")
+
+    return caught
 
 
 def generate_and_send_report(
