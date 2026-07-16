@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block content %}
+  <h1>Reports</h1>
+  <p class="lede">Daily, weekly, and monthly summaries. Scheduled emails also appear here after they run.</p>
+
+  {% if message %}
+  <div class="flash ok">{{ message }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="flash error">{{ error }}</div>
+  {% endif %}
+
+  <div class="panel">
+    <h2 style="margin-top:0">Send now</h2>
+    <div class="actions">
+      <form method="post" action="/reports/send">
+        <input type="hidden" name="period" value="daily">
+        <input type="hidden" name="send_email_flag" value="1">
+        <button type="submit">Send daily</button>
+      </form>
+      <form method="post" action="/reports/send">
+        <input type="hidden" name="period" value="weekly">
+        <input type="hidden" name="send_email_flag" value="1">
+        <button type="submit" class="secondary">Send weekly</button>
+      </form>
+      <form method="post" action="/reports/send">
+        <input type="hidden" name="period" value="monthly">
+        <input type="hidden" name="send_email_flag" value="1">
+        <button type="submit" class="secondary">Send monthly</button>
+      </form>
+      <form method="post" action="/reports/send">
+        <input type="hidden" name="period" value="daily">
+        <input type="hidden" name="send_email_flag" value="0">
+        <button type="submit" class="secondary">Generate daily (no email)</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">History</h2>
+    {% if reports %}
+    <table>
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Period</th>
+          <th>Subject</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in reports %}
+        <tr>
+          <td>{{ r.sent_at }}</td>
+          <td>{{ r.period }}</td>
+          <td>{{ r.subject }}</td>
+          <td>{{ r.status }}{% if r.error %} — {{ r.error }}{% endif %}</td>
+          <td><a href="/reports/{{ r.id }}">View</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No reports yet.</p>
+    {% endif %}
+  </div>
+{% endblock %}

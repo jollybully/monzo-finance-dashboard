@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Spending{% endblock %}
+{% block content %}
+  <h1>Spending</h1>
+  <p class="lede">Breakdown by Monzo category and merchant. Recategorise transactions in the Monzo app; the next sync will pick up changes.</p>
+
+  <div class="two-col">
+    <div class="panel">
+      <h2 style="margin-top:0">Categories (this month)</h2>
+      {% if mtd.by_category %}
+      <table>
+        <thead><tr><th>Category</th><th class="num">Spent</th></tr></thead>
+        <tbody>
+          {% for row in mtd.by_category %}
+          <tr><td>{{ row.name }}</td><td class="num">{{ row.total | money }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No data yet.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <h2 style="margin-top:0">Top merchants (this month)</h2>
+      {% if mtd.by_merchant %}
+      <table>
+        <thead><tr><th>Merchant</th><th class="num">Spent</th></tr></thead>
+        <tbody>
+          {% for row in mtd.by_merchant %}
+          <tr><td>{{ row.name }}</td><td class="num">{{ row.total | money }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No data yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Month comparison</h2>
+    <table>
+      <thead>
+        <tr>
+          <th></th>
+          <th class="num">This month</th>
+          <th class="num">Last month</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Spent</td>
+          <td class="num">{{ mtd.spent | money }}</td>
+          <td class="num">{{ prev.spent | money }}</td>
+        </tr>
+        <tr>
+          <td>Inflows</td>
+          <td class="num">{{ mtd.income | money }}</td>
+          <td class="num">{{ prev.income | money }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Largest transactions (this month)</h2>
+    {% if mtd.largest %}
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Merchant</th>
+          <th>Category</th>
+          <th class="num">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in mtd.largest %}
+        <tr>
+          <td>{{ tx.date }}</td>
+          <td>{{ tx.merchant or '—' }}</td>
+          <td>{{ tx.category or '—' }}</td>
+          <td class="num">{{ tx.amount | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No outflow transactions this month.</p>
+    {% endif %}
+  </div>
+{% endblock %}

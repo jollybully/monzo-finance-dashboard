@@ -1,0 +1,270 @@
+:root {
+  --bg: #f3efe6;
+  --bg-deep: #e7e0d2;
+  --ink: #1c2421;
+  --muted: #5c675f;
+  --line: #c9c0b0;
+  --accent: #0f6b5c;
+  --accent-soft: #d7ebe6;
+  --warn: #8a3b12;
+  --danger: #8b1e1e;
+  --ok: #1f6b3a;
+  --surface: rgba(255, 252, 246, 0.88);
+  --font-display: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --font-body: "Source Sans 3", "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.5;
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #fff8ea 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #d9ece7 0%, transparent 45%),
+    linear-gradient(180deg, var(--bg) 0%, var(--bg-deep) 100%);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.shell {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 1rem;
+}
+
+.brand {
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+
+.nav a {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.nav a.active,
+.nav a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.6rem;
+}
+
+h1 {
+  font-size: 2rem;
+}
+
+h2 {
+  font-size: 1.35rem;
+  margin-top: 2rem;
+}
+
+.lede {
+  color: var(--muted);
+  margin: 0 0 1.5rem;
+  max-width: 42rem;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin: 1.25rem 0 1.75rem;
+}
+
+.metric {
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.metric .label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.25rem;
+}
+
+.metric .value {
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 600;
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  padding: 1.1rem 1.2rem;
+  margin-bottom: 1.25rem;
+}
+
+.flash {
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.flash.error {
+  border-left-color: var(--danger);
+  background: #f7e6e6;
+  color: var(--danger);
+}
+
+.flash.ok {
+  border-left-color: var(--ok);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.98rem;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.55rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+th {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 1rem 0;
+}
+
+button,
+.button {
+  appearance: none;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: #f7f3ea;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.55rem 0.95rem;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+button.secondary,
+.button.secondary {
+  background: transparent;
+  color: var(--ink);
+}
+
+button:hover,
+.button:hover {
+  opacity: 0.9;
+}
+
+label {
+  display: block;
+  margin: 0.9rem 0 0.35rem;
+  font-weight: 600;
+}
+
+input,
+select {
+  width: min(100%, 320px);
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  background: #fffdf8;
+  font: inherit;
+  border-radius: 2px;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 0.92rem;
+  margin-top: 0.35rem;
+}
+
+.report-frame {
+  border: 1px solid var(--line);
+  background: #fffdf8;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+}
+
+@media (max-width: 720px) {
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .brand {
+    font-size: 1.4rem;
+  }
+
+  h1 {
+    font-size: 1.7rem;
+  }
+}

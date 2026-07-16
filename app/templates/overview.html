@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+  <h1>Overview</h1>
+  <p class="lede">Current position, safe daily spend, and this month so far. Categories come from Monzo.</p>
+
+  {% if sync_message %}
+  <div class="flash ok">{{ sync_message }}</div>
+  {% endif %}
+  {% if sync_error %}
+  <div class="flash error">{{ sync_error }}</div>
+  {% endif %}
+
+  <div class="metrics">
+    <div class="metric">
+      <span class="label">Balance</span>
+      <span class="value">{{ safe.current_balance | money }}</span>
+    </div>
+    <div class="metric">
+      <span class="label">Safe daily spend</span>
+      <span class="value">{{ safe.safe_daily_spend | money }}</span>
+    </div>
+    <div class="metric">
+      <span class="label">Days until payday</span>
+      <span class="value">{{ safe.days_until_payday }}</span>
+    </div>
+    <div class="metric">
+      <span class="label">Next payday</span>
+      <span class="value" style="font-size:1.15rem">{{ safe.next_payday }}</span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <form method="post" action="/sync">
+      <button type="submit">Sync now</button>
+    </form>
+  </div>
+  <p class="hint">
+    Last sync:
+    {% if settings.last_sync_at %}{{ settings.last_sync_at }}{% else %}never{% endif %}
+  </p>
+
+  <h2>This month</h2>
+  <div class="metrics">
+    <div class="metric">
+      <span class="label">Income (estimate)</span>
+      <span class="value">{{ income | money }}</span>
+    </div>
+    <div class="metric">
+      <span class="label">Spent</span>
+      <span class="value">{{ mtd.spent | money }}</span>
+    </div>
+    <div class="metric">
+      <span class="label">Inflows (actual)</span>
+      <span class="value">{{ mtd.income | money }}</span>
+    </div>
+    <div class="metric">
+      <span class="label">Savings rate</span>
+      <span class="value">{% if savings_rate is not none %}{{ savings_rate }}%{% else %}—{% endif %}</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Top categories (MTD)</h3>
+    {% if mtd.by_category %}
+    <table>
+      <thead><tr><th>Category</th><th class="num">Spent</th></tr></thead>
+      <tbody>
+        {% for row in mtd.by_category %}
+        <tr><td>{{ row.name }}</td><td class="num">{{ row.total | money }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No spending synced yet for this month.</p>
+    {% endif %}
+  </div>
+{% endblock %}

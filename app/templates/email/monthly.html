@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Georgia, serif; color: #1c2421; line-height: 1.5;">
+  <h1 style="font-size: 1.4rem;">{{ title }}</h1>
+  <p>{{ start }} → {{ end }}</p>
+  <p>
+    <strong>Spent:</strong> {{ spent | money }}<br>
+    <strong>Inflows (actual):</strong> {{ income_actual | money }}<br>
+    <strong>Income (estimate):</strong> {{ income_estimate | money }}<br>
+    <strong>Savings rate:</strong> {% if savings_rate is not none %}{{ savings_rate }}%{% else %}—{% endif %}<br>
+    <strong>Balance:</strong> {{ balance | money }}
+  </p>
+  {% if top_categories %}
+  <h2 style="font-size: 1.15rem;">Category breakdown</h2>
+  <ul>
+    {% for row in top_categories %}
+    <li>{{ row.name }} {{ row.total | money }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if largest %}
+  <h2 style="font-size: 1.15rem;">Largest transactions</h2>
+  <ul>
+    {% for tx in largest %}
+    <li>{{ tx.date }} — {{ tx.merchant or 'Unknown' }} ({{ tx.category or '—' }}) {{ tx.amount | money }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</body>
+</html>

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Report {{ report.id }}{% endblock %}
+{% block content %}
+  <h1>{{ report.subject }}</h1>
+  <p class="lede">
+    {{ report.period | capitalize }} · {{ report.period_start }} → {{ report.period_end }} ·
+    {{ report.status }} · {{ report.sent_at }}
+  </p>
+  <p><a href="/reports">← Back to reports</a></p>
+  <div class="report-frame">
+    {{ report.body_html | safe }}
+  </div>
+{% endblock %}

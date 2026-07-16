@@ -1,0 +1,15 @@
+{{ title }}
+{{ start }} → {{ end }}
+
+Spent: {{ spent | money }}
+Inflows (actual): {{ income_actual | money }}
+Income (estimate): {{ income_estimate | money }}
+Savings rate: {% if savings_rate is not none %}{{ savings_rate }}%{% else %}—{% endif %}
+Balance: {{ balance | money }}
+
+{% if top_categories %}Category breakdown:
+{% for row in top_categories %}- {{ row.name }} {{ row.total | money }}
+{% endfor %}{% endif %}
+{% if largest %}Largest transactions:
+{% for tx in largest %}- {{ tx.date }} — {{ tx.merchant or 'Unknown' }} ({{ tx.category or '—' }}) {{ tx.amount | money }}
+{% endfor %}{% endif %}

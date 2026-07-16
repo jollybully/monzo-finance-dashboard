@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Georgia, serif; color: #1c2421; line-height: 1.5;">
+  <h1 style="font-size: 1.4rem;">{{ title }}</h1>
+  <p>{{ today }}</p>
+  <p>
+    <strong>Balance:</strong> {{ balance | money }}<br>
+    <strong>Safe spend today:</strong> {{ safe_daily_spend | money }}<br>
+    <strong>Days until payday:</strong> {{ days_until_payday }} ({{ next_payday }})
+  </p>
+  <h2 style="font-size: 1.15rem;">This month</h2>
+  <p>
+    <strong>Income (estimate):</strong> {{ monthly_income | money }}<br>
+    <strong>Spent:</strong> {{ mtd_spent | money }}<br>
+    <strong>Inflows (actual):</strong> {{ mtd_income_actual | money }}<br>
+    <strong>Savings rate:</strong> {% if savings_rate is not none %}{{ savings_rate }}%{% else %}—{% endif %}
+  </p>
+  {% if top_categories %}
+  <h2 style="font-size: 1.15rem;">Top spending</h2>
+  <ul>
+    {% for row in top_categories %}
+    <li>{{ row.name }} {{ row.total | money }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</body>
+</html>

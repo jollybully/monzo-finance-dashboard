@@ -1,0 +1,17 @@
+{{ title }}
+{{ start }} → {{ end }}
+
+Week spent: {{ spent | money }}
+Prior week: {{ prev_spent | money }} ({% if spent_delta > 0 %}+{% endif %}{{ spent_delta | money }})
+Week inflows: {{ income | money }}
+Balance: {{ balance | money }}
+
+{% if top_categories %}Top categories:
+{% for row in top_categories %}- {{ row.name }} {{ row.total | money }}
+{% endfor %}{% endif %}
+{% if top_merchants %}Top merchants:
+{% for row in top_merchants %}- {{ row.name }} {{ row.total | money }}
+{% endfor %}{% endif %}
+{% if largest %}Largest transactions:
+{% for tx in largest %}- {{ tx.date }} — {{ tx.merchant or 'Unknown' }} ({{ tx.category or '—' }}) {{ tx.amount | money }}
+{% endfor %}{% endif %}

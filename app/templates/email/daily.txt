@@ -1,0 +1,16 @@
+{{ title }}
+{{ today }}
+
+Balance: {{ balance | money }}
+Safe spend today: {{ safe_daily_spend | money }}
+Days until payday: {{ days_until_payday }} ({{ next_payday }})
+
+This month:
+Income (estimate): {{ monthly_income | money }}
+Spent: {{ mtd_spent | money }}
+Inflows (actual): {{ mtd_income_actual | money }}
+Savings rate: {% if savings_rate is not none %}{{ savings_rate }}%{% else %}—{% endif %}
+
+{% if top_categories %}Top spending:
+{% for row in top_categories %}- {{ row.name }} {{ row.total | money }}
+{% endfor %}{% endif %}

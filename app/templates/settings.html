@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+  <h1>Settings</h1>
+  <p class="lede">Seed your Monzo balance once. New synced transactions adjust it automatically. Categories are managed in Monzo.</p>
+
+  {% if saved %}
+  <div class="flash ok">Settings saved.</div>
+  {% endif %}
+
+  <form method="post" action="/settings" class="panel">
+    <label for="current_balance">Current balance (£)</label>
+    <input id="current_balance" name="current_balance" value="{{ settings.current_balance }}" required>
+    <p class="hint">Enter the true Monzo balance when first setting up, or to correct drift.</p>
+
+    <label for="payday_day">Payday day of month (1–28)</label>
+    <input id="payday_day" name="payday_day" type="number" min="1" max="28" value="{{ settings.payday_day }}" required>
+
+    <label for="monthly_income_estimate">Monthly income estimate (£)</label>
+    <input id="monthly_income_estimate" name="monthly_income_estimate" value="{{ settings.monthly_income_estimate }}" required>
+
+    <label for="reserved_buffer">Reserved buffer (£)</label>
+    <input id="reserved_buffer" name="reserved_buffer" value="{{ settings.reserved_buffer }}" required>
+    <p class="hint">Held back from safe daily spend (bills/savings placeholder until Phase 2).</p>
+
+    <label for="email_to">Report email (optional override)</label>
+    <input id="email_to" name="email_to" type="email" value="{{ settings.email_to or '' }}" placeholder="Uses EMAIL_TO from env if blank">
+
+    <div class="actions" style="margin-top:1.25rem">
+      <button type="submit">Save settings</button>
+    </div>
+  </form>
+{% endblock %}
