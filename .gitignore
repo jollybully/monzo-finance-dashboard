@@ -1,5 +1,9 @@
 .env
-credentials/
+.env.*
+!.env.example
+credentials/*
+!credentials/.gitkeep
+docs/screenshots/
 __pycache__/
 *.pyc
 .venv/

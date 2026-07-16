@@ -3,19 +3,23 @@
 {% block content %}
   <h1>Spending</h1>
   <p class="lede">
-    Pay period {{ period.start }} → {{ period.next_payday }} (through {{ period.today }}).
-    Recategorise in Monzo; the next sync will pick up changes. Budgets stay calendar-month.
+    Pay period {{ period.start | shortdate }} → {{ period.next_payday | shortdate }}
+    (through {{ period.today | shortdate }}). Recategorise in Monzo; the next sync will pick up changes.
+    Budgets stay calendar-month.
   </p>
 
   <div class="two-col">
     <div class="panel">
-      <h2 style="margin-top:0">Categories (this pay period)</h2>
+      <h2>Categories</h2>
       {% if mtd.by_category %}
       <table>
         <thead><tr><th>Category</th><th class="num">Spent</th></tr></thead>
         <tbody>
           {% for row in mtd.by_category %}
-          <tr><td>{{ row.name }}</td><td class="num">{{ row.total | money }}</td></tr>
+          <tr>
+            <td>{{ row.name }}</td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
@@ -25,13 +29,16 @@
     </div>
 
     <div class="panel">
-      <h2 style="margin-top:0">Top merchants (this pay period)</h2>
+      <h2>Top merchants</h2>
       {% if mtd.by_merchant %}
       <table>
         <thead><tr><th>Merchant</th><th class="num">Spent</th></tr></thead>
         <tbody>
           {% for row in mtd.by_merchant %}
-          <tr><td>{{ row.name }}</td><td class="num">{{ row.total | money }}</td></tr>
+          <tr>
+            <td>{{ row.name }}</td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
           {% endfor %}
         </tbody>
       </table>
@@ -42,28 +49,21 @@
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">Budgets (this month)</h2>
+    <h2>Budgets this month</h2>
     {% if budgets %}
-    <table>
-      <thead>
-        <tr>
-          <th>Category</th>
-          <th class="num">Spent</th>
-          <th class="num">Limit</th>
-          <th class="num">Remaining</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for b in budgets %}
-        <tr>
-          <td>{{ b.category }}{% if b.over %} · over{% endif %}</td>
-          <td class="num">{{ b.spent | money }}</td>
-          <td class="num">{{ b.monthly_limit | money }}</td>
-          <td class="num">{{ b.remaining | money }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="budget-list">
+      {% for b in budgets %}
+      <div class="budget-row">
+        <div class="budget-row-head">
+          <span class="name">{{ b.category }}{% if b.over %} <span class="hint danger">over</span>{% endif %}</span>
+          <span class="figures">{{ b.spent | money }} / {{ b.monthly_limit | money }} · {{ b.remaining | money }} left</span>
+        </div>
+        <div class="progress{% if b.over %} over{% endif %}">
+          <span style="width: {% if b.pct > 100 %}100{% else %}{{ b.pct }}{% endif %}%"></span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
     <p class="hint"><a href="/budgets">Manage budgets</a></p>
     {% else %}
     <p class="hint">No budgets set. <a href="/budgets">Add one</a>.</p>
@@ -71,13 +71,13 @@
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">Pay period comparison</h2>
+    <h2>Pay period comparison</h2>
     <table>
       <thead>
         <tr>
           <th></th>
           <th class="num">This period</th>
-          <th class="num">Previous period</th>
+          <th class="num">Previous</th>
         </tr>
       </thead>
       <tbody>
@@ -91,17 +91,16 @@
           <td class="num">{{ mtd.income | money }}</td>
           <td class="num">{{ prev.income | money }}</td>
         </tr>
-        <tr>
-          <td class="hint" colspan="3">
-            This: {{ mtd.start }} → {{ mtd.end }} · Previous: {{ prev.start }} → {{ prev.end }}
-          </td>
-        </tr>
       </tbody>
     </table>
+    <p class="hint">
+      This: {{ mtd.start | shortdate }} → {{ mtd.end | shortdate }} ·
+      Previous: {{ prev.start | shortdate }} → {{ prev.end | shortdate }}
+    </p>
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">Largest transactions (this pay period)</h2>
+    <h2>Largest transactions</h2>
     {% if mtd.largest %}
     <table>
       <thead>
@@ -115,7 +114,7 @@
       <tbody>
         {% for tx in mtd.largest %}
         <tr>
-          <td>{{ tx.date }}</td>
+          <td>{{ tx.date | shortdate }}</td>
           <td>{{ tx.merchant or '—' }}</td>
           <td>{{ tx.category or '—' }}</td>
           <td class="num">{{ tx.amount | money }}</td>
@@ -124,7 +123,7 @@
       </tbody>
     </table>
     {% else %}
-    <p class="hint">No outflow transactions this month.</p>
+    <p class="hint">No outflow transactions this period.</p>
     {% endif %}
   </div>
 {% endblock %}

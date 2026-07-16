@@ -1,20 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Reports{% endblock %}
 {% block content %}
-  <h1>📬 Reports</h1>
-  <p class="lede">
-    Daily = yesterday glance (Pushover + slim email). Weekly/monthly = deeper previous-period reviews.
-  </p>
+  <h1>Reports</h1>
+  <p class="lede">Daily = yesterday glance (Pushover + slim email). Weekly/monthly = deeper previous-period reviews.</p>
 
-  {% if message %}
-  <div class="flash ok">{{ message }}</div>
-  {% endif %}
-  {% if error %}
-  <div class="flash error">{{ error }}</div>
-  {% endif %}
+  {% if message %}<div class="flash ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
 
   <div class="panel">
-    <h2 style="margin-top:0">Send now</h2>
+    <h2>Send now</h2>
     <div class="actions">
       <form method="post" action="/reports/send">
         <input type="hidden" name="period" value="daily">
@@ -34,13 +28,13 @@
       <form method="post" action="/reports/send">
         <input type="hidden" name="period" value="daily">
         <input type="hidden" name="send_email_flag" value="0">
-        <button type="submit" class="secondary">Preview daily (no send)</button>
+        <button type="submit" class="secondary">Preview daily</button>
       </form>
     </div>
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">History</h2>
+    <h2>History</h2>
     {% if reports %}
     <table>
       <thead>
@@ -55,7 +49,7 @@
       <tbody>
         {% for r in reports %}
         <tr>
-          <td>{{ r.sent_at }}</td>
+          <td>{{ r.sent_at | shortdatetime }}</td>
           <td>{{ r.period }}</td>
           <td>{{ r.subject }}</td>
           <td>{{ r.status }}{% if r.error %} — {{ r.error }}{% endif %}</td>

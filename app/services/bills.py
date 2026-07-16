@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from calendar import monthrange
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -105,20 +106,79 @@ def list_all_bills(db: Session) -> list[UpcomingBill]:
     )
 
 
-def bills_due_by(db: Session, end: date, *, today: date | None = None) -> list[UpcomingBill]:
+def _step_due(bill: UpcomingBill, due: date) -> date | None:
+    if bill.frequency == "once":
+        return None
+    if bill.frequency == "weekly":
+        return due + timedelta(days=7)
+    day = max(1, min(28, bill.due_day if bill.due_day is not None else due.day))
+    nxt = _add_months(due.replace(day=1), 1)
+    last = monthrange(nxt.year, nxt.month)[1]
+    return date(nxt.year, nxt.month, min(day, last))
+
+
+@dataclass(frozen=True)
+class BillOccurrence:
+    """A single bill charge within a date window (recurring bills may appear more than once)."""
+
+    id: int
+    name: str
+    amount: Decimal
+    next_due_date: date
+
+
+def bill_occurrences(
+    bill: UpcomingBill,
+    start: date,
+    end: date,
+) -> list[BillOccurrence]:
+    """Expand a bill into every charge from start through end (inclusive)."""
+    if start > end:
+        return []
+
+    due = bill.next_due_date
+    safety = 0
+    while due < start and bill.frequency != "once" and safety < 52:
+        nxt = _step_due(bill, due)
+        if nxt is None or nxt <= due:
+            break
+        due = nxt
+        safety += 1
+
+    out: list[BillOccurrence] = []
+    while due <= end and safety < 64:
+        if due >= start:
+            out.append(
+                BillOccurrence(
+                    id=bill.id,
+                    name=bill.name,
+                    amount=bill.amount or Decimal("0.00"),
+                    next_due_date=due,
+                )
+            )
+        nxt = _step_due(bill, due)
+        if nxt is None or nxt <= due:
+            break
+        due = nxt
+        safety += 1
+    return out
+
+
+def bills_due_by(db: Session, end: date, *, today: date | None = None) -> list[BillOccurrence]:
+    """All bill charges from today through end (inclusive), expanding weekly/monthly recurrence."""
     today = today or date.today()
     advance_overdue_bills(db, today)
-    return [
-        b
-        for b in list_active_bills(db)
-        if today <= b.next_due_date <= end
-    ]
+    occurrences: list[BillOccurrence] = []
+    for bill in list_active_bills(db):
+        occurrences.extend(bill_occurrences(bill, today, end))
+    occurrences.sort(key=lambda o: (o.next_due_date, o.name))
+    return occurrences
 
 
 def bills_reserved_total(db: Session, end: date, *, today: date | None = None) -> Decimal:
     total = Decimal("0.00")
-    for bill in bills_due_by(db, end, today=today):
-        total += bill.amount or Decimal("0.00")
+    for occ in bills_due_by(db, end, today=today):
+        total += occ.amount
     return total
 
 
@@ -137,6 +197,9 @@ def create_bill(
     due = next_due_date or compute_next_due(
         frequency, due_day, explicit=next_due_date
     )
+    # Persist weekday for weekly bills so recurrence stays on the intended day
+    if frequency == "weekly" and due_day is None:
+        due_day = due.weekday()
     row = UpcomingBill(
         name=name.strip(),
         amount=amount,
@@ -172,6 +235,8 @@ def update_bill(
     row.name = name.strip()
     row.amount = amount
     row.frequency = frequency
+    if frequency == "weekly" and due_day is None:
+        due_day = next_due_date.weekday()
     row.due_day = due_day
     row.next_due_date = next_due_date
     row.category = (category.strip() if category else None) or None

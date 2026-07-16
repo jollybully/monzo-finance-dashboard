@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from urllib.parse import quote
 
@@ -65,7 +65,47 @@ def _parse_money(value: str) -> Decimal:
         raise ValueError(f"Invalid amount: {value}") from exc
 
 
+def _as_date(value: date | datetime | str | None) -> date | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _shortdate(value: date | datetime | str | None) -> str:
+    parsed = _as_date(value)
+    if parsed is None:
+        return "—"
+    return f"{parsed.day} {parsed.strftime('%b %Y')}"
+
+
+def _shortdatetime(value: datetime | date | str | None) -> str:
+    if value is None or value == "":
+        return "never"
+    if isinstance(value, datetime):
+        return f"{value.day} {value.strftime('%b %Y, %H:%M')}"
+    if isinstance(value, date):
+        return _shortdate(value)
+    text = str(value).strip()
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return f"{parsed.day} {parsed.strftime('%b %Y, %H:%M')}"
+    except ValueError:
+        return text
+
+
 templates.env.filters["money"] = _money
+templates.env.filters["shortdate"] = _shortdate
+templates.env.filters["shortdatetime"] = _shortdatetime
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -126,12 +166,19 @@ def spending(request: Request, db: Session = Depends(get_db)):
 @router.get("/bills", response_class=HTMLResponse)
 def bills_page(request: Request, db: Session = Depends(get_db)):
     suggestions = list_suggestions(db)
+    bills = list_all_bills(db)
+    edit_raw = request.query_params.get("edit", "").strip()
+    edit_bill = None
+    if edit_raw.isdigit():
+        edit_id = int(edit_raw)
+        edit_bill = next((b for b in bills if b.id == edit_id), None)
     return templates.TemplateResponse(
         request,
         "bills.html",
         {
             "active": "bills",
-            "bills": list_all_bills(db),
+            "bills": bills,
+            "edit_bill": edit_bill,
             "suggestions": suggestions,
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),

@@ -16,7 +16,7 @@
       <span class="label">Balance</span>
       <span class="value">{{ safe.current_balance | money }}</span>
     </div>
-    <div class="metric">
+    <div class="metric primary">
       <span class="label">Safe daily spend</span>
       <span class="value">{{ safe.safe_daily_spend | money }}</span>
     </div>
@@ -26,52 +26,54 @@
     </div>
     <div class="metric">
       <span class="label">Next payday</span>
-      <span class="value" style="font-size:1.15rem">{{ safe.next_payday }}</span>
+      <span class="value compact">{{ safe.next_payday | shortdate }}</span>
     </div>
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">Safe spend breakdown</h2>
-    <table>
+    <h2>Safe spend breakdown</h2>
+    <table class="breakdown">
       <tbody>
         <tr><td>Balance</td><td class="num">{{ safe.current_balance | money }}</td></tr>
         <tr><td>Reserved buffer</td><td class="num">− {{ safe.reserved_buffer | money }}</td></tr>
         <tr><td>Bills due by payday</td><td class="num">− {{ safe.bills_reserved | money }}</td></tr>
-        <tr><td><strong>Available</strong></td><td class="num"><strong>{{ safe.available | money }}</strong></td></tr>
+        <tr class="emphasis"><td>Available</td><td class="num">{{ safe.available | money }}</td></tr>
         <tr><td>Safe daily (÷ {{ safe.days_until_payday or 1 }} days)</td><td class="num">{{ safe.safe_daily_spend | money }}</td></tr>
       </tbody>
     </table>
     {% if safe.upcoming_bills %}
-    <h3>Bills in this pay period</h3>
-    <table>
-      <thead><tr><th>Bill</th><th>Due</th><th class="num">Amount</th></tr></thead>
-      <tbody>
-        {% for b in safe.upcoming_bills %}
-        <tr>
-          <td>{{ b.name }}</td>
-          <td>{{ b.next_due_date }}</td>
-          <td class="num">{{ b.amount | money }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="subpanel">
+      <h3>Bills in this pay period</h3>
+      <table>
+        <thead><tr><th>Bill</th><th>Due</th><th class="num">Amount</th></tr></thead>
+        <tbody>
+          {% for b in safe.upcoming_bills %}
+          <tr>
+            <td>{{ b.name }}</td>
+            <td>{{ b.next_due_date | shortdate }}</td>
+            <td class="num">{{ b.amount | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% else %}
     <p class="hint">No upcoming bills before payday. Add rent and commitments on <a href="/bills">Bills</a>.</p>
     {% endif %}
   </div>
 
-  <div class="actions">
+  <div class="sync-row">
     <form method="post" action="/sync">
       <button type="submit">Sync now</button>
     </form>
+    <p class="hint">
+      Last sync:
+      {% if settings.last_sync_at %}{{ settings.last_sync_at | shortdatetime }}{% else %}never{% endif %}
+    </p>
   </div>
-  <p class="hint">
-    Last sync:
-    {% if settings.last_sync_at %}{{ settings.last_sync_at }}{% else %}never{% endif %}
-  </p>
 
   <h2>This pay period</h2>
-  <p class="hint">{{ period.start }} → {{ period.next_payday }} (stats through {{ period.today }})</p>
+  <p class="section-meta">{{ period.start | shortdate }} → {{ period.next_payday | shortdate }} (through {{ period.today | shortdate }})</p>
   <div class="metrics">
     <div class="metric">
       <span class="label">Income (rules)</span>
@@ -92,13 +94,16 @@
   </div>
 
   <div class="panel">
-    <h3>Top categories (this pay period)</h3>
+    <h3>Top categories</h3>
     {% if mtd.by_category %}
     <table>
       <thead><tr><th>Category</th><th class="num">Spent</th></tr></thead>
       <tbody>
         {% for row in mtd.by_category %}
-        <tr><td>{{ row.name }}</td><td class="num">{{ row.total | money }}</td></tr>
+        <tr>
+          <td>{{ row.name }}</td>
+          <td class="num">{{ row.total | money }}</td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>

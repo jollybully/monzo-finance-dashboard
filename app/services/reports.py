@@ -112,7 +112,7 @@ def build_daily_report(
     overs = over_budget(db, today)
     urgent_bills = _urgent_bills(db, today)
     largest = yday.largest[0] if yday.largest else None
-    priority = 1 if (overs or urgent_bills) else 0
+    priority = 0
 
     context = {
         "title": "Yesterday",
@@ -167,7 +167,7 @@ def build_weekly_report(
     delta = week.spent - prev.spent
     overs = over_budget(db, today)
     urgent_bills = _urgent_bills(db, today, within_days=7)
-    priority = 1 if (overs or urgent_bills) else 0
+    priority = 0
 
     context = {
         "title": "Weekly review",
@@ -221,7 +221,7 @@ def build_monthly_report(
     income_for_rate = income_est if income_est > 0 else month.income
     rate = savings_rate(income_for_rate, month.spent)
     overs = over_budget(db, today)
-    priority = 1 if overs else 0
+    priority = 0
     label = start.strftime("%B %Y")
 
     context = {

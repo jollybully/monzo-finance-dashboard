@@ -8,41 +8,104 @@
   {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
 
   <div class="panel">
-    <h2 style="margin-top:0">Add bill</h2>
-    <form method="post" action="/bills">
-      <label for="name">Name</label>
-      <input id="name" name="name" required placeholder="Rent">
-
-      <label for="amount">Amount (£)</label>
-      <input id="amount" name="amount" required placeholder="1200">
-
-      <label for="frequency">Frequency</label>
-      <select id="frequency" name="frequency">
-        <option value="monthly">Monthly</option>
-        <option value="weekly">Weekly</option>
-        <option value="once">Once</option>
-      </select>
-
-      <label for="due_day">Due day (1–28 monthly, or 0=Mon…6=Sun weekly)</label>
-      <input id="due_day" name="due_day" type="number" min="0" max="28" placeholder="1">
-
-      <label for="next_due_date">Next due date (optional override, YYYY-MM-DD)</label>
-      <input id="next_due_date" name="next_due_date" type="date">
-
-      <label for="category">Category (optional, e.g. Bills or Savings)</label>
-      <input id="category" name="category" placeholder="Bills">
-
-      <label for="notes">Notes</label>
-      <input id="notes" name="notes">
-
-      <div class="actions" style="margin-top:1rem">
+    <h2>Add bill</h2>
+    <form method="post" action="/bills" class="form-grid">
+      <div class="field">
+        <label for="name">Name</label>
+        <input id="name" name="name" required placeholder="Rent">
+      </div>
+      <div class="field">
+        <label for="amount">Amount (£)</label>
+        <input id="amount" name="amount" required placeholder="1200">
+      </div>
+      <div class="field">
+        <label for="frequency">Frequency</label>
+        <select id="frequency" name="frequency">
+          <option value="monthly">Monthly</option>
+          <option value="weekly">Weekly</option>
+          <option value="once">Once</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="due_day">Due day</label>
+        <input id="due_day" name="due_day" type="number" min="0" max="28" placeholder="1">
+        <p class="hint">1–28 monthly, or 0=Mon…6=Sun weekly</p>
+      </div>
+      <div class="field">
+        <label for="next_due_date">Next due (optional)</label>
+        <input id="next_due_date" name="next_due_date" type="date">
+      </div>
+      <div class="field">
+        <label for="category">Category</label>
+        <input id="category" name="category" placeholder="Bills">
+      </div>
+      <div class="field full">
+        <label for="notes">Notes</label>
+        <input id="notes" name="notes">
+      </div>
+      <div class="field">
         <button type="submit">Add bill</button>
       </div>
     </form>
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">Your bills</h2>
+    <h2>Your bills</h2>
+
+    {% if edit_bill %}
+    <div class="subpanel" id="edit-bill">
+      <h3>Edit {{ edit_bill.name }}</h3>
+      <form method="post" action="/bills/{{ edit_bill.id }}/update" class="form-grid">
+        <div class="field">
+          <label>Name</label>
+          <input name="name" value="{{ edit_bill.name }}" required>
+        </div>
+        <div class="field">
+          <label>Amount (£)</label>
+          <input name="amount" value="{{ edit_bill.amount }}" required>
+        </div>
+        <div class="field">
+          <label>Frequency</label>
+          <select name="frequency">
+            <option value="monthly" {% if edit_bill.frequency == 'monthly' %}selected{% endif %}>Monthly</option>
+            <option value="weekly" {% if edit_bill.frequency == 'weekly' %}selected{% endif %}>Weekly</option>
+            <option value="once" {% if edit_bill.frequency == 'once' %}selected{% endif %}>Once</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Due day</label>
+          <input name="due_day" type="number" min="0" max="28" value="{{ edit_bill.due_day if edit_bill.due_day is not none else '' }}">
+          <p class="hint">Weekly: 0=Mon … 6=Sun</p>
+        </div>
+        <div class="field">
+          <label>Next due</label>
+          <input name="next_due_date" type="date" value="{{ edit_bill.next_due_date.isoformat() }}" required>
+        </div>
+        <div class="field">
+          <label>Category</label>
+          <input name="category" value="{{ edit_bill.category or '' }}">
+        </div>
+        <div class="field">
+          <label>Active</label>
+          <select name="active">
+            <option value="1" {% if edit_bill.active %}selected{% endif %}>Yes</option>
+            <option value="0" {% if not edit_bill.active %}selected{% endif %}>No</option>
+          </select>
+        </div>
+        <div class="field full">
+          <label>Notes</label>
+          <input name="notes" value="{{ edit_bill.notes or '' }}">
+        </div>
+        <div class="field">
+          <div class="inline-forms">
+            <button type="submit">Save</button>
+            <a class="button secondary" href="/bills">Cancel</a>
+          </div>
+        </div>
+      </form>
+    </div>
+    {% endif %}
+
     {% if bills %}
     <table>
       <thead>
@@ -57,22 +120,27 @@
       </thead>
       <tbody>
         {% for b in bills %}
-        <tr>
+        <tr class="{% if edit_bill and edit_bill.id == b.id %}emphasis{% endif %}">
           <td>
             {{ b.name }}
             {% if b.category %}<div class="hint">{{ b.category }}</div>{% endif %}
           </td>
-          <td>{{ b.next_due_date }}</td>
+          <td>{{ b.next_due_date | shortdate }}</td>
           <td>{{ b.frequency }}{% if b.due_day is not none %} ({{ b.due_day }}){% endif %}</td>
           <td class="num">{{ b.amount | money }}</td>
           <td>{{ 'yes' if b.active else 'no' }}</td>
           <td>
-            <form method="post" action="/bills/{{ b.id }}/deactivate" style="display:inline">
-              {% if b.active %}<button type="submit" class="secondary">Deactivate</button>{% endif %}
-            </form>
-            <form method="post" action="/bills/{{ b.id }}/delete" style="display:inline" onsubmit="return confirm('Delete this bill?')">
-              <button type="submit" class="secondary">Delete</button>
-            </form>
+            <div class="inline-forms">
+              <a class="button secondary" href="/bills?edit={{ b.id }}#edit-bill">Edit</a>
+              {% if b.active %}
+              <form method="post" action="/bills/{{ b.id }}/deactivate">
+                <button type="submit" class="secondary">Deactivate</button>
+              </form>
+              {% endif %}
+              <form method="post" action="/bills/{{ b.id }}/delete" onsubmit="return confirm('Delete this bill?')">
+                <button type="submit" class="secondary">Delete</button>
+              </form>
+            </div>
           </td>
         </tr>
         {% endfor %}
@@ -84,7 +152,7 @@
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">Suggested from history</h2>
+    <h2>Suggested from history</h2>
     <form method="post" action="/bills/suggestions/scan" class="actions">
       <button type="submit" class="secondary">Scan transactions</button>
     </form>
@@ -106,15 +174,17 @@
           <td>{{ s.merchant }}</td>
           <td>{{ s.frequency_guess }}</td>
           <td class="num">{{ s.typical_amount | money }}</td>
-          <td>{{ s.last_seen }}</td>
+          <td>{{ s.last_seen | shortdate }}</td>
           <td>{{ s.confidence }}%</td>
           <td>
-            <form method="post" action="/bills/suggestions/{{ s.id }}/accept" style="display:inline">
-              <button type="submit">Accept</button>
-            </form>
-            <form method="post" action="/bills/suggestions/{{ s.id }}/dismiss" style="display:inline">
-              <button type="submit" class="secondary">Dismiss</button>
-            </form>
+            <div class="inline-forms">
+              <form method="post" action="/bills/suggestions/{{ s.id }}/accept">
+                <button type="submit">Accept</button>
+              </form>
+              <form method="post" action="/bills/suggestions/{{ s.id }}/dismiss">
+                <button type="submit" class="secondary">Dismiss</button>
+              </form>
+            </div>
           </td>
         </tr>
         {% endfor %}

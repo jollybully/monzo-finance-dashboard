@@ -1,13 +1,20 @@
 # Personal Finance Dashboard
 
-Self-hosted finance dashboard: sync Monzo transactions from Google Sheets, track balance and bills-aware safe daily spend, manage income rules and budgets, and send lean daily/weekly/monthly digests via email and Pushover.
+Self-hosted dashboard for Monzo: sync transactions from Google Sheets, track bills-aware safe daily spend, manage budgets and income rules, and get lean digests by email and Pushover.
+
+## Features
+
+- **Sheets sync** — pull Monzo export on a schedule or with one click
+- **Safe daily spend** — balance minus buffer and bills due before payday, divided by days left
+- **Pay-period stats** — spent, inflows, and top categories from last payday to next
+- **Bills** — recurring commitments plus suggestions scanned from history
+- **30-day forecast** — income rules and bills projected forward (not everyday spend)
+- **Category budgets** — calendar-month limits with progress at a glance
+- **Digests** — daily / weekly / monthly via email and Pushover
 
 ## Stack
 
-- FastAPI + SQLAlchemy + PostgreSQL
-- Google Sheets API (read-only Monzo export)
-- APScheduler (sync + reports)
-- Jinja2 dashboard + SMTP email + Pushover
+FastAPI · SQLAlchemy · PostgreSQL · Google Sheets API · APScheduler · Jinja2 · SMTP · Pushover · Docker Compose
 
 ## Quick start
 
@@ -35,28 +42,24 @@ Open [http://localhost:8000](http://localhost:8000).
 
 7. In **Settings**, set **Current balance** to match Monzo once, plus reserved buffer. Add an **income rule** (e.g. Salary, last Friday of month).
 
-8. On **Bills**, add rent (or Accept a recurring suggestion) so safe spend reserves it until payday.
+8. On **Bills**, add rent (or accept a recurring suggestion) so safe spend reserves it until payday.
 
-## Digests
-
-| Cadence | Default time | Content | Channels |
-|---------|--------------|---------|----------|
-| Daily | 07:00 (your `.env` may differ) | Yesterday spend + top merchants + tiny today outlook; watch-outs only if urgent | Pushover + slim email |
-| Weekly | Monday | Previous Mon–Sun review | Email + short Pushover |
-| Monthly | 1st of month | Previous calendar month | Email + short Pushover |
-
-Daily email can be muted with `REPORT_DAILY_EMAIL=false` (Pushover still sends).
-
-## Phase 2 features
-
-- Income rules, upcoming bills, forecast, budgets, recurring suggestions
-- Pay-period stats on Overview/Spending (last payday → next payday)
-- Bills-aware safe spend
+## Safe spend
 
 ```text
 available = balance − reserved_buffer − bills due by payday
 safe_daily = available / days until payday
 ```
+
+## Digests
+
+| Cadence | Default time | Content | Channels |
+|---------|--------------|---------|----------|
+| Daily | 07:00 | Yesterday spend + top merchants + tiny today outlook | Pushover + slim email |
+| Weekly | Monday | Previous Mon–Sun review | Email + short Pushover |
+| Monthly | 1st of month | Previous calendar month | Email + short Pushover |
+
+Mute daily email with `REPORT_DAILY_EMAIL=false` (Pushover still sends). Times follow `APP_TZ`.
 
 ## API
 
@@ -67,6 +70,15 @@ safe_daily = available / days until payday
 - `GET /api/reports`
 - `POST /api/reports/{daily|weekly|monthly}/send?send=true`
 
+## Security
+
+This repo is meant to be public, but your money data is not.
+
+- **Never commit** `.env` or `credentials/service-account.json` — both are gitignored
+- Use `.env.example` as a template only
+- Share the Google Sheet **Viewer-only** with the service account email
+- Keep SMTP passwords and Pushover tokens in env / a secrets manager in production
+
 ## Out of scope (later)
 
-Open Banking direct debits / scheduled payments, auto-mark bills paid, AI insights, net worth.
+Open Banking direct debits, auto-mark bills paid, AI insights, net worth.

@@ -8,13 +8,13 @@
   {% if message %}<div class="flash ok">{{ message }}</div>{% endif %}
   {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
 
-  <form method="post" action="/settings" class="panel">
+  <form method="post" action="/settings" class="panel form-stack">
     <label for="current_balance">Current balance (£)</label>
     <input id="current_balance" name="current_balance" value="{{ settings.current_balance }}" required>
     <p class="hint">
-      Set this once to match Monzo (or when correcting drift). It is stored in Postgres and survives
-      container restarts. Sync only adjusts it for transactions <em>after</em> this was last changed
-      {% if settings.balance_updated_at %}(as of {{ settings.balance_updated_at }}){% endif %}.
+      Set this once to match Monzo (or when correcting drift). Sync only adjusts it for
+      transactions after this was last changed
+      {% if settings.balance_updated_at %}(as of {{ settings.balance_updated_at | shortdatetime }}){% endif %}.
     </p>
 
     <label for="payday_day">Fallback payday day (1–28)</label>
@@ -32,43 +32,49 @@
     <label for="email_to">Report email (optional override)</label>
     <input id="email_to" name="email_to" type="email" value="{{ settings.email_to or '' }}" placeholder="Uses EMAIL_TO from env if blank">
 
-    <div class="actions" style="margin-top:1.25rem">
+    <div class="actions">
       <button type="submit">Save settings</button>
     </div>
   </form>
 
   <div class="panel">
-    <h2 style="margin-top:0">Income rules</h2>
-    <form method="post" action="/settings/income">
-      <label for="income_name">Name</label>
-      <input id="income_name" name="name" required placeholder="Salary">
-
-      <label for="income_amount">Amount (£)</label>
-      <input id="income_amount" name="amount" required placeholder="2600">
-
-      <label for="income_frequency">Frequency</label>
-      <select id="income_frequency" name="frequency">
-        <option value="monthly">Monthly</option>
-        <option value="weekly">Weekly</option>
-      </select>
-
-      <label for="rule_type">Rule</label>
-      <select id="rule_type" name="rule_type">
-        <option value="last_friday">Last Friday of month</option>
-        <option value="day_of_month">Day of month</option>
-        <option value="weekday">Weekday (weekly)</option>
-      </select>
-
-      <label for="rule_value">Rule value (day 1–28, or weekday 0=Mon…6=Sun; blank for last Friday)</label>
-      <input id="rule_value" name="rule_value" type="number" min="0" max="28">
-
-      <div class="actions" style="margin-top:1rem">
+    <h2>Income rules</h2>
+    <form method="post" action="/settings/income" class="form-grid">
+      <div class="field">
+        <label for="income_name">Name</label>
+        <input id="income_name" name="name" required placeholder="Salary">
+      </div>
+      <div class="field">
+        <label for="income_amount">Amount (£)</label>
+        <input id="income_amount" name="amount" required placeholder="2600">
+      </div>
+      <div class="field">
+        <label for="income_frequency">Frequency</label>
+        <select id="income_frequency" name="frequency">
+          <option value="monthly">Monthly</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="rule_type">Rule</label>
+        <select id="rule_type" name="rule_type">
+          <option value="last_friday">Last Friday of month</option>
+          <option value="day_of_month">Day of month</option>
+          <option value="weekday">Weekday (weekly)</option>
+        </select>
+      </div>
+      <div class="field full">
+        <label for="rule_value">Rule value</label>
+        <input id="rule_value" name="rule_value" type="number" min="0" max="28">
+        <p class="hint">Day 1–28, or weekday 0=Mon…6=Sun; blank for last Friday</p>
+      </div>
+      <div class="field">
         <button type="submit">Add income rule</button>
       </div>
     </form>
 
     {% if income_rules %}
-    <table style="margin-top:1.25rem">
+    <table style="margin-top: 1.25rem">
       <thead>
         <tr>
           <th>Name</th>

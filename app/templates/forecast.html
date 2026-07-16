@@ -9,18 +9,18 @@
       <span class="label">Starting balance</span>
       <span class="value">{{ forecast.start_balance | money }}</span>
     </div>
-    <div class="metric">
+    <div class="metric primary">
       <span class="label">Projected (30d)</span>
       <span class="value">{{ forecast.end_balance | money }}</span>
     </div>
     <div class="metric">
       <span class="label">Next payday</span>
-      <span class="value" style="font-size:1.15rem">{{ forecast.next_payday }}</span>
+      <span class="value compact">{{ forecast.next_payday | shortdate }}</span>
     </div>
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">Timeline</h2>
+    <h2>Timeline</h2>
     {% if forecast.timeline|length > 1 %}
     <table>
       <thead>
@@ -33,11 +33,11 @@
       <tbody>
         {% for point in forecast.timeline %}
         <tr>
-          <td>{{ point.date }}</td>
+          <td>{{ point.date | shortdate }}</td>
           <td>
             {% if point.events %}
               {% for e in point.events %}
-                <div>{{ e.kind }}: {{ e.name }} {{ e.amount | money }}</div>
+              <div>{{ e.kind }}: {{ e.name }} {{ e.amount | money }}</div>
               {% endfor %}
             {% else %}
               <span class="hint">Start</span>
