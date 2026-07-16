@@ -1,28 +1,39 @@
 <!DOCTYPE html>
 <html>
 <body style="font-family: Georgia, serif; color: #1c2421; line-height: 1.5;">
-  <h1 style="font-size: 1.4rem;">{{ title }}</h1>
-  <p>{{ start }} → {{ end }}</p>
+  <h1 style="font-size: 1.35rem;">📅 {{ label }}</h1>
+  <p style="color:#5c675f;">{{ start }} → {{ end }}</p>
+
   <p>
     <strong>Spent:</strong> {{ spent | money }}<br>
-    <strong>Inflows (actual):</strong> {{ income_actual | money }}<br>
-    <strong>Income (estimate):</strong> {{ income_estimate | money }}<br>
-    <strong>Savings rate:</strong> {% if savings_rate is not none %}{{ savings_rate }}%{% else %}—{% endif %}<br>
-    <strong>Balance:</strong> {{ balance | money }}
+    <strong>Inflows:</strong> {{ income_actual | money }}<br>
+    <strong>Income (rules):</strong> {{ income_estimate | money }}<br>
+    <strong>Savings rate:</strong> {% if savings_rate is not none %}{{ savings_rate }}%{% else %}—{% endif %}
   </p>
+
   {% if top_categories %}
-  <h2 style="font-size: 1.15rem;">Category breakdown</h2>
+  <h2 style="font-size: 1.05rem;">Categories</h2>
   <ul>
     {% for row in top_categories %}
-    <li>{{ row.name }} {{ row.total | money }}</li>
+    <li>{% if row.name | cat_emoji %}{{ row.name | cat_emoji }} {% endif %}{{ row.name }} {{ row.total | money }}</li>
     {% endfor %}
   </ul>
   {% endif %}
+
   {% if largest %}
-  <h2 style="font-size: 1.15rem;">Largest transactions</h2>
+  <h2 style="font-size: 1.05rem;">Largest</h2>
   <ul>
     {% for tx in largest %}
-    <li>{{ tx.date }} — {{ tx.merchant or 'Unknown' }} ({{ tx.category or '—' }}) {{ tx.amount | money }}</li>
+    <li>{{ tx.date }} — {{ tx.merchant or 'Unknown' }} {{ tx.amount | money }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if over_budget %}
+  <h2 style="font-size: 1.05rem;">⚠️ Over budget</h2>
+  <ul>
+    {% for b in over_budget %}
+    <li>{{ b.category }} {{ b.spent | money }} / {{ b.monthly_limit | money }}</li>
     {% endfor %}
   </ul>
   {% endif %}

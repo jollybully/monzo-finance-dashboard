@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Bills{% endblock %}
+{% block content %}
+  <h1>Bills</h1>
+  <p class="lede">Upcoming commitments reserved from safe spend until payday. Recurring suggestions come from Monzo history — accept only what you want.</p>
+
+  {% if message %}<div class="flash ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+
+  <div class="panel">
+    <h2 style="margin-top:0">Add bill</h2>
+    <form method="post" action="/bills">
+      <label for="name">Name</label>
+      <input id="name" name="name" required placeholder="Rent">
+
+      <label for="amount">Amount (£)</label>
+      <input id="amount" name="amount" required placeholder="1200">
+
+      <label for="frequency">Frequency</label>
+      <select id="frequency" name="frequency">
+        <option value="monthly">Monthly</option>
+        <option value="weekly">Weekly</option>
+        <option value="once">Once</option>
+      </select>
+
+      <label for="due_day">Due day (1–28 monthly, or 0=Mon…6=Sun weekly)</label>
+      <input id="due_day" name="due_day" type="number" min="0" max="28" placeholder="1">
+
+      <label for="next_due_date">Next due date (optional override, YYYY-MM-DD)</label>
+      <input id="next_due_date" name="next_due_date" type="date">
+
+      <label for="category">Category (optional, e.g. Bills or Savings)</label>
+      <input id="category" name="category" placeholder="Bills">
+
+      <label for="notes">Notes</label>
+      <input id="notes" name="notes">
+
+      <div class="actions" style="margin-top:1rem">
+        <button type="submit">Add bill</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Your bills</h2>
+    {% if bills %}
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Next due</th>
+          <th>Freq</th>
+          <th class="num">Amount</th>
+          <th>Active</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in bills %}
+        <tr>
+          <td>
+            {{ b.name }}
+            {% if b.category %}<div class="hint">{{ b.category }}</div>{% endif %}
+          </td>
+          <td>{{ b.next_due_date }}</td>
+          <td>{{ b.frequency }}{% if b.due_day is not none %} ({{ b.due_day }}){% endif %}</td>
+          <td class="num">{{ b.amount | money }}</td>
+          <td>{{ 'yes' if b.active else 'no' }}</td>
+          <td>
+            <form method="post" action="/bills/{{ b.id }}/deactivate" style="display:inline">
+              {% if b.active %}<button type="submit" class="secondary">Deactivate</button>{% endif %}
+            </form>
+            <form method="post" action="/bills/{{ b.id }}/delete" style="display:inline" onsubmit="return confirm('Delete this bill?')">
+              <button type="submit" class="secondary">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No bills yet — add rent here so safe spend stays honest.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Suggested from history</h2>
+    <form method="post" action="/bills/suggestions/scan" class="actions">
+      <button type="submit" class="secondary">Scan transactions</button>
+    </form>
+    {% if suggestions %}
+    <table>
+      <thead>
+        <tr>
+          <th>Merchant</th>
+          <th>Guess</th>
+          <th class="num">Typical</th>
+          <th>Last seen</th>
+          <th>Confidence</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in suggestions %}
+        <tr>
+          <td>{{ s.merchant }}</td>
+          <td>{{ s.frequency_guess }}</td>
+          <td class="num">{{ s.typical_amount | money }}</td>
+          <td>{{ s.last_seen }}</td>
+          <td>{{ s.confidence }}%</td>
+          <td>
+            <form method="post" action="/bills/suggestions/{{ s.id }}/accept" style="display:inline">
+              <button type="submit">Accept</button>
+            </form>
+            <form method="post" action="/bills/suggestions/{{ s.id }}/dismiss" style="display:inline">
+              <button type="submit" class="secondary">Dismiss</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No open suggestions. Run a scan after syncing a few months of history.</p>
+    {% endif %}
+  </div>
+{% endblock %}

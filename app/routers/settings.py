@@ -37,14 +37,19 @@ def api_update_settings(
 def form_update_settings(
     current_balance: str = Form(...),
     payday_day: int = Form(...),
-    monthly_income_estimate: str = Form(...),
+    monthly_income_estimate: str = Form("0"),
     reserved_buffer: str = Form(...),
     email_to: str = Form(""),
     db: Session = Depends(get_db),
 ):
     row = get_or_create_settings(db)
-    seed_balance(db, Decimal(current_balance.replace("£", "").replace(",", "").strip() or "0"))
-    row = get_or_create_settings(db)
+    new_balance = Decimal(
+        current_balance.replace("£", "").replace(",", "").strip() or "0"
+    )
+    # Only re-seed (and move the as-of cutoff) when the balance value changes.
+    if new_balance != (row.current_balance or Decimal("0.00")):
+        seed_balance(db, new_balance)
+        row = get_or_create_settings(db)
     row.payday_day = max(1, min(28, payday_day))
     row.monthly_income_estimate = Decimal(
         monthly_income_estimate.replace("£", "").replace(",", "").strip() or "0"

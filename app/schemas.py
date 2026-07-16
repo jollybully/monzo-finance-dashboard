@@ -32,13 +32,22 @@ class SyncResult(BaseModel):
     message: str
 
 
+class BillSummary(BaseModel):
+    id: int
+    name: str
+    amount: Decimal
+    next_due_date: date
+
+
 class SafeSpendOut(BaseModel):
     current_balance: Decimal
     reserved_buffer: Decimal
+    bills_reserved: Decimal = Decimal("0.00")
     available: Decimal
     days_until_payday: int
     next_payday: date
     safe_daily_spend: Decimal
+    upcoming_bills: list[BillSummary] = []
 
 
 class ReportRunOut(BaseModel):

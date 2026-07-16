@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Forecast{% endblock %}
+{% block content %}
+  <h1>Forecast</h1>
+  <p class="lede">Projected balance over the next 30 days from income rules and upcoming bills. Everyday spending is not projected.</p>
+
+  <div class="metrics">
+    <div class="metric">
+      <span class="label">Starting balance</span>
+      <span class="value">{{ forecast.start_balance | money }}</span>
+    </div>
+    <div class="metric">
+      <span class="label">Projected (30d)</span>
+      <span class="value">{{ forecast.end_balance | money }}</span>
+    </div>
+    <div class="metric">
+      <span class="label">Next payday</span>
+      <span class="value" style="font-size:1.15rem">{{ forecast.next_payday }}</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Timeline</h2>
+    {% if forecast.timeline|length > 1 %}
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Events</th>
+          <th class="num">Balance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for point in forecast.timeline %}
+        <tr>
+          <td>{{ point.date }}</td>
+          <td>
+            {% if point.events %}
+              {% for e in point.events %}
+                <div>{{ e.kind }}: {{ e.name }} {{ e.amount | money }}</div>
+              {% endfor %}
+            {% else %}
+              <span class="hint">Start</span>
+            {% endif %}
+          </td>
+          <td class="num">{{ point.balance | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No income or bills scheduled in the next 30 days. Add rules in Settings and bills on Bills.</p>
+    {% endif %}
+  </div>
+{% endblock %}

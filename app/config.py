@@ -20,12 +20,19 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_from: str = ""
+    smtp_from_name: str = "Finance"
     email_to: str = ""
     smtp_use_tls: bool = True
+
+    pushover_enabled: bool = True
+    pushover_app_token: str = ""
+    pushover_user_key: str = ""
+    pushover_device: str = ""
 
     report_daily_enabled: bool = True
     report_weekly_enabled: bool = True
     report_monthly_enabled: bool = True
+    report_daily_email: bool = True
     report_daily_hour: int = 7
     report_daily_minute: int = 0
     report_weekly_hour: int = 7

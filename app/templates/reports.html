@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Reports{% endblock %}
 {% block content %}
-  <h1>Reports</h1>
-  <p class="lede">Daily, weekly, and monthly summaries. Scheduled emails also appear here after they run.</p>
+  <h1>📬 Reports</h1>
+  <p class="lede">
+    Daily = yesterday glance (Pushover + slim email). Weekly/monthly = deeper previous-period reviews.
+  </p>
 
   {% if message %}
   <div class="flash ok">{{ message }}</div>
@@ -32,7 +34,7 @@
       <form method="post" action="/reports/send">
         <input type="hidden" name="period" value="daily">
         <input type="hidden" name="send_email_flag" value="0">
-        <button type="submit" class="secondary">Generate daily (no email)</button>
+        <button type="submit" class="secondary">Preview daily (no send)</button>
       </form>
     </div>
   </div>

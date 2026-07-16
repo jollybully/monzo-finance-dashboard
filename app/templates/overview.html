@@ -2,7 +2,7 @@
 {% block title %}Overview{% endblock %}
 {% block content %}
   <h1>Overview</h1>
-  <p class="lede">Current position, safe daily spend, and this month so far. Categories come from Monzo.</p>
+  <p class="lede">Current position with bills reserved until payday. Categories come from Monzo.</p>
 
   {% if sync_message %}
   <div class="flash ok">{{ sync_message }}</div>
@@ -30,6 +30,36 @@
     </div>
   </div>
 
+  <div class="panel">
+    <h2 style="margin-top:0">Safe spend breakdown</h2>
+    <table>
+      <tbody>
+        <tr><td>Balance</td><td class="num">{{ safe.current_balance | money }}</td></tr>
+        <tr><td>Reserved buffer</td><td class="num">− {{ safe.reserved_buffer | money }}</td></tr>
+        <tr><td>Bills due by payday</td><td class="num">− {{ safe.bills_reserved | money }}</td></tr>
+        <tr><td><strong>Available</strong></td><td class="num"><strong>{{ safe.available | money }}</strong></td></tr>
+        <tr><td>Safe daily (÷ {{ safe.days_until_payday or 1 }} days)</td><td class="num">{{ safe.safe_daily_spend | money }}</td></tr>
+      </tbody>
+    </table>
+    {% if safe.upcoming_bills %}
+    <h3>Bills in this pay period</h3>
+    <table>
+      <thead><tr><th>Bill</th><th>Due</th><th class="num">Amount</th></tr></thead>
+      <tbody>
+        {% for b in safe.upcoming_bills %}
+        <tr>
+          <td>{{ b.name }}</td>
+          <td>{{ b.next_due_date }}</td>
+          <td class="num">{{ b.amount | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No upcoming bills before payday. Add rent and commitments on <a href="/bills">Bills</a>.</p>
+    {% endif %}
+  </div>
+
   <div class="actions">
     <form method="post" action="/sync">
       <button type="submit">Sync now</button>
@@ -40,10 +70,11 @@
     {% if settings.last_sync_at %}{{ settings.last_sync_at }}{% else %}never{% endif %}
   </p>
 
-  <h2>This month</h2>
+  <h2>This pay period</h2>
+  <p class="hint">{{ period.start }} → {{ period.next_payday }} (stats through {{ period.today }})</p>
   <div class="metrics">
     <div class="metric">
-      <span class="label">Income (estimate)</span>
+      <span class="label">Income (rules)</span>
       <span class="value">{{ income | money }}</span>
     </div>
     <div class="metric">
@@ -61,7 +92,7 @@
   </div>
 
   <div class="panel">
-    <h3>Top categories (MTD)</h3>
+    <h3>Top categories (this pay period)</h3>
     {% if mtd.by_category %}
     <table>
       <thead><tr><th>Category</th><th class="num">Spent</th></tr></thead>
@@ -72,7 +103,7 @@
       </tbody>
     </table>
     {% else %}
-    <p class="hint">No spending synced yet for this month.</p>
+    <p class="hint">No spending synced yet for this pay period.</p>
     {% endif %}
   </div>
 {% endblock %}

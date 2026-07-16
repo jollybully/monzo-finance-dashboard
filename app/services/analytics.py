@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from sqlalchemy import and_
@@ -99,6 +99,36 @@ def month_to_date_stats(db: Session, today: date | None = None) -> PeriodStats:
     today = today or date.today()
     start, end = _month_bounds(today)
     return summarize_period(db, start, end)
+
+
+def day_stats(db: Session, day: date, *, top_n: int = 3) -> PeriodStats:
+    """Stats for a single calendar day (e.g. yesterday)."""
+    return summarize_period(db, day, day, top_n=top_n)
+
+
+def pay_period_to_date_stats(
+    db: Session, today: date | None = None, *, top_n: int = 5
+) -> PeriodStats:
+    """Spending/income since last payday through today."""
+    from app.services.income import current_pay_period
+
+    today = today or date.today()
+    period = current_pay_period(db, today)
+    return summarize_period(db, period.start, today, top_n=top_n)
+
+
+def previous_pay_period_stats(
+    db: Session, today: date | None = None, *, top_n: int = 5
+) -> PeriodStats:
+    """Full previous pay cycle (last payday back to the one before)."""
+    from app.services.income import current_pay_period, previous_pay_date
+
+    today = today or date.today()
+    current = current_pay_period(db, today)
+    # Day before current period start is the end of the prior cycle
+    prior_end = current.start - timedelta(days=1)
+    prior_start = previous_pay_date(db, prior_end)
+    return summarize_period(db, prior_start, prior_end, top_n=top_n)
 
 
 def savings_rate(income: Decimal, spent: Decimal) -> Decimal | None:

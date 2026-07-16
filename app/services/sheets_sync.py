@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -147,9 +148,18 @@ def sync_transactions(db: Session) -> SyncResult:
         for t in db.query(Transaction).all()
     }
 
+    account = get_or_create_settings(db)
+    # Only apply amounts for txs after the balance was seeded. Historical
+    # backfill must not rewrite a manually seeded Monzo balance.
+    balance_as_of = account.balance_updated_at
+    if balance_as_of is not None and balance_as_of.tzinfo is None:
+        balance_as_of = balance_as_of.replace(tzinfo=timezone.utc)
+    app_tz = ZoneInfo(get_settings().app_tz)
+
     inserted = 0
     updated = 0
     balance_delta = Decimal("0.00")
+    skipped_balance = 0
 
     for raw in rows[1:]:
         row = [str(c) if c is not None else "" for c in raw]
@@ -187,8 +197,17 @@ def sync_transactions(db: Session) -> SyncResult:
                     notes=notes,
                 )
             )
-            balance_delta += amount
             inserted += 1
+            if balance_as_of is None:
+                skipped_balance += 1
+            else:
+                tx_dt = datetime.combine(
+                    tx_date, tx_time or time.min, tzinfo=app_tz
+                ).astimezone(timezone.utc)
+                if tx_dt > balance_as_of:
+                    balance_delta += amount
+                else:
+                    skipped_balance += 1
             continue
 
         dirty = False
@@ -224,10 +243,17 @@ def sync_transactions(db: Session) -> SyncResult:
         db.commit()
 
     settings = mark_synced(db)
+    msg = f"Synced {inserted} new, {updated} updated"
+    if balance_as_of is None and inserted:
+        msg += " (balance unchanged — set Current balance in Settings to match Monzo)"
+    elif skipped_balance and balance_delta == 0:
+        msg += f" ({skipped_balance} historical txs ignored for balance)"
+    elif balance_delta != 0:
+        msg += f" (balance {balance_delta:+})"
     return SyncResult(
         inserted=inserted,
         updated=updated,
         balance_delta=balance_delta,
         current_balance=settings.current_balance,
-        message=f"Synced {inserted} new, {updated} updated",
+        message=msg,
     )

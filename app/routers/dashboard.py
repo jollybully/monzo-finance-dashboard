@@ -1,5 +1,6 @@
-from datetime import date, timedelta
-from decimal import Decimal
+from datetime import date
+from decimal import Decimal, InvalidOperation
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -8,8 +9,41 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import ReportRun
-from app.services.analytics import month_to_date_stats, savings_rate, summarize_period
+from app.services.analytics import (
+    pay_period_to_date_stats,
+    previous_pay_period_stats,
+    savings_rate,
+)
 from app.services.balance import get_or_create_settings
+from app.services.bills import (
+    create_bill,
+    deactivate_bill,
+    delete_bill,
+    list_all_bills,
+    update_bill,
+)
+from app.services.budgets import (
+    budget_progress,
+    create_budget,
+    delete_budget,
+    list_budgets,
+    list_seen_categories,
+    update_budget,
+)
+from app.services.forecast import build_forecast
+from app.services.income import (
+    create_income_rule,
+    current_pay_period,
+    delete_income_rule,
+    list_all_rules,
+    monthly_income_total,
+)
+from app.services.recurring import (
+    accept_suggestion,
+    detect_recurring,
+    dismiss_suggestion,
+    list_suggestions,
+)
 from app.services.reports import generate_and_send_report
 from app.services.safe_spend import calculate_safe_spend
 from app.services.sheets_sync import sync_transactions
@@ -23,6 +57,14 @@ def _money(value: Decimal | float | int | None) -> str:
     return f"£{amount:,.2f}"
 
 
+def _parse_money(value: str) -> Decimal:
+    cleaned = value.replace("£", "").replace(",", "").strip() or "0"
+    try:
+        return Decimal(cleaned)
+    except InvalidOperation as exc:
+        raise ValueError(f"Invalid amount: {value}") from exc
+
+
 templates.env.filters["money"] = _money
 
 
@@ -30,9 +72,10 @@ templates.env.filters["money"] = _money
 def overview(request: Request, db: Session = Depends(get_db)):
     settings = get_or_create_settings(db)
     safe = calculate_safe_spend(db)
-    mtd = month_to_date_stats(db)
-    income = settings.monthly_income_estimate or Decimal("0.00")
-    rate = savings_rate(income, mtd.spent)
+    period = current_pay_period(db)
+    stats = pay_period_to_date_stats(db)
+    income = monthly_income_total(db)
+    rate = savings_rate(income, stats.spent)
     return templates.TemplateResponse(
         request,
         "overview.html",
@@ -40,7 +83,8 @@ def overview(request: Request, db: Session = Depends(get_db)):
             "active": "overview",
             "settings": settings,
             "safe": safe,
-            "mtd": mtd,
+            "period": period,
+            "mtd": stats,
             "income": income,
             "savings_rate": rate,
             "sync_message": request.query_params.get("sync"),
@@ -53,29 +97,214 @@ def overview(request: Request, db: Session = Depends(get_db)):
 def sync_now(db: Session = Depends(get_db)):
     try:
         result = sync_transactions(db)
-        msg = f"{result.message}. Balance {_money(result.current_balance)}"
+        msg = quote(f"{result.message}. Balance {_money(result.current_balance)}")
         return RedirectResponse(url=f"/?sync={msg}", status_code=303)
     except Exception as exc:  # noqa: BLE001
-        return RedirectResponse(url=f"/?error={exc}", status_code=303)
+        return RedirectResponse(url=f"/?error={quote(str(exc))}", status_code=303)
 
 
 @router.get("/spending", response_class=HTMLResponse)
 def spending(request: Request, db: Session = Depends(get_db)):
     today = date.today()
-    mtd = month_to_date_stats(db, today)
-    first = today.replace(day=1)
-    prev_end = first - timedelta(days=1)
-    prev_start = prev_end.replace(day=1)
-    prev = summarize_period(db, prev_start, prev_end, top_n=8)
+    period = current_pay_period(db, today)
+    mtd = pay_period_to_date_stats(db, today, top_n=8)
+    prev = previous_pay_period_stats(db, today, top_n=8)
+    budgets = budget_progress(db, today)
     return templates.TemplateResponse(
         request,
         "spending.html",
         {
             "active": "spending",
+            "period": period,
             "mtd": mtd,
             "prev": prev,
+            "budgets": budgets,
         },
     )
+
+
+@router.get("/bills", response_class=HTMLResponse)
+def bills_page(request: Request, db: Session = Depends(get_db)):
+    suggestions = list_suggestions(db)
+    return templates.TemplateResponse(
+        request,
+        "bills.html",
+        {
+            "active": "bills",
+            "bills": list_all_bills(db),
+            "suggestions": suggestions,
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/bills")
+def bills_create(
+    name: str = Form(...),
+    amount: str = Form(...),
+    frequency: str = Form("monthly"),
+    due_day: str = Form(""),
+    category: str = Form(""),
+    notes: str = Form(""),
+    next_due_date: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        due_day_val = int(due_day) if due_day.strip() else None
+        explicit = date.fromisoformat(next_due_date) if next_due_date.strip() else None
+        create_bill(
+            db,
+            name=name,
+            amount=_parse_money(amount),
+            frequency=frequency,
+            due_day=due_day_val,
+            next_due_date=explicit,
+            category=category or None,
+            notes=notes or None,
+        )
+        return RedirectResponse(url="/bills?message=Bill+added", status_code=303)
+    except Exception as exc:  # noqa: BLE001
+        return RedirectResponse(url=f"/bills?error={quote(str(exc))}", status_code=303)
+
+
+@router.post("/bills/{bill_id}/update")
+def bills_update(
+    bill_id: int,
+    name: str = Form(...),
+    amount: str = Form(...),
+    frequency: str = Form(...),
+    due_day: str = Form(""),
+    next_due_date: str = Form(...),
+    category: str = Form(""),
+    notes: str = Form(""),
+    active: str = Form("1"),
+    db: Session = Depends(get_db),
+):
+    try:
+        due_day_val = int(due_day) if due_day.strip() else None
+        row = update_bill(
+            db,
+            bill_id,
+            name=name,
+            amount=_parse_money(amount),
+            frequency=frequency,
+            due_day=due_day_val,
+            next_due_date=date.fromisoformat(next_due_date),
+            category=category or None,
+            notes=notes or None,
+            active=active == "1",
+        )
+        if not row:
+            return RedirectResponse(url="/bills?error=Bill+not+found", status_code=303)
+        return RedirectResponse(url="/bills?message=Bill+updated", status_code=303)
+    except Exception as exc:  # noqa: BLE001
+        return RedirectResponse(url=f"/bills?error={quote(str(exc))}", status_code=303)
+
+
+@router.post("/bills/{bill_id}/deactivate")
+def bills_deactivate(bill_id: int, db: Session = Depends(get_db)):
+    deactivate_bill(db, bill_id)
+    return RedirectResponse(url="/bills?message=Bill+deactivated", status_code=303)
+
+
+@router.post("/bills/{bill_id}/delete")
+def bills_delete(bill_id: int, db: Session = Depends(get_db)):
+    delete_bill(db, bill_id)
+    return RedirectResponse(url="/bills?message=Bill+deleted", status_code=303)
+
+
+@router.post("/bills/suggestions/scan")
+def bills_scan(db: Session = Depends(get_db)):
+    found = detect_recurring(db)
+    return RedirectResponse(
+        url=f"/bills?message={quote(f'Found {len(found)} suggestions')}",
+        status_code=303,
+    )
+
+
+@router.post("/bills/suggestions/{suggestion_id}/accept")
+def bills_accept(suggestion_id: int, db: Session = Depends(get_db)):
+    bill = accept_suggestion(db, suggestion_id)
+    if not bill:
+        return RedirectResponse(url="/bills?error=Suggestion+not+found", status_code=303)
+    return RedirectResponse(
+        url=f"/bills?message={quote(f'Accepted {bill.name}')}", status_code=303
+    )
+
+
+@router.post("/bills/suggestions/{suggestion_id}/dismiss")
+def bills_dismiss(suggestion_id: int, db: Session = Depends(get_db)):
+    dismiss_suggestion(db, suggestion_id)
+    return RedirectResponse(url="/bills?message=Suggestion+dismissed", status_code=303)
+
+
+@router.get("/forecast", response_class=HTMLResponse)
+def forecast_page(request: Request, db: Session = Depends(get_db)):
+    forecast = build_forecast(db, days=30)
+    return templates.TemplateResponse(
+        request,
+        "forecast.html",
+        {"active": "forecast", "forecast": forecast},
+    )
+
+
+@router.get("/budgets", response_class=HTMLResponse)
+def budgets_page(request: Request, db: Session = Depends(get_db)):
+    return templates.TemplateResponse(
+        request,
+        "budgets.html",
+        {
+            "active": "budgets",
+            "budgets": list_budgets(db),
+            "progress": budget_progress(db),
+            "categories": list_seen_categories(db),
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/budgets")
+def budgets_create(
+    category: str = Form(...),
+    monthly_limit: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    try:
+        create_budget(db, category=category, monthly_limit=_parse_money(monthly_limit))
+        return RedirectResponse(url="/budgets?message=Budget+added", status_code=303)
+    except Exception as exc:  # noqa: BLE001
+        return RedirectResponse(url=f"/budgets?error={quote(str(exc))}", status_code=303)
+
+
+@router.post("/budgets/{budget_id}/update")
+def budgets_update(
+    budget_id: int,
+    category: str = Form(...),
+    monthly_limit: str = Form(...),
+    active: str = Form("1"),
+    db: Session = Depends(get_db),
+):
+    try:
+        row = update_budget(
+            db,
+            budget_id,
+            category=category,
+            monthly_limit=_parse_money(monthly_limit),
+            active=active == "1",
+        )
+        if not row:
+            return RedirectResponse(url="/budgets?error=Not+found", status_code=303)
+        return RedirectResponse(url="/budgets?message=Budget+updated", status_code=303)
+    except Exception as exc:  # noqa: BLE001
+        return RedirectResponse(url=f"/budgets?error={quote(str(exc))}", status_code=303)
+
+
+@router.post("/budgets/{budget_id}/delete")
+def budgets_delete(budget_id: int, db: Session = Depends(get_db)):
+    delete_budget(db, budget_id)
+    return RedirectResponse(url="/budgets?message=Budget+deleted", status_code=303)
 
 
 @router.get("/reports", response_class=HTMLResponse)
@@ -120,10 +349,10 @@ def send_report(
         return RedirectResponse(url="/reports?error=Invalid+period", status_code=303)
     try:
         run = generate_and_send_report(db, period, send=send_email_flag == "1")
-        msg = f"Generated {period} report #{run.id} ({run.status})"
+        msg = quote(f"Generated {period} report #{run.id} ({run.status})")
         return RedirectResponse(url=f"/reports?message={msg}", status_code=303)
     except Exception as exc:  # noqa: BLE001
-        return RedirectResponse(url=f"/reports?error={exc}", status_code=303)
+        return RedirectResponse(url=f"/reports?error={quote(str(exc))}", status_code=303)
 
 
 @router.get("/settings", response_class=HTMLResponse)
@@ -135,6 +364,44 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
         {
             "active": "settings",
             "settings": settings,
+            "income_rules": list_all_rules(db),
+            "monthly_income": monthly_income_total(db),
             "saved": request.query_params.get("saved"),
+            "message": request.query_params.get("message"),
+            "error": request.query_params.get("error"),
         },
     )
+
+
+@router.post("/settings/income")
+def settings_add_income(
+    name: str = Form(...),
+    amount: str = Form(...),
+    frequency: str = Form("monthly"),
+    rule_type: str = Form(...),
+    rule_value: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    try:
+        value = int(rule_value) if rule_value.strip() else None
+        if rule_type == "last_friday":
+            value = None
+        create_income_rule(
+            db,
+            name=name,
+            amount=_parse_money(amount),
+            frequency=frequency,
+            rule_type=rule_type,
+            rule_value=value,
+        )
+        return RedirectResponse(url="/settings?message=Income+rule+added", status_code=303)
+    except Exception as exc:  # noqa: BLE001
+        return RedirectResponse(
+            url=f"/settings?error={quote(str(exc))}", status_code=303
+        )
+
+
+@router.post("/settings/income/{rule_id}/delete")
+def settings_delete_income(rule_id: int, db: Session = Depends(get_db)):
+    delete_income_rule(db, rule_id)
+    return RedirectResponse(url="/settings?message=Income+rule+removed", status_code=303)

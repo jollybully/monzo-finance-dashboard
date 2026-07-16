@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Budgets{% endblock %}
+{% block content %}
+  <h1>Budgets</h1>
+  <p class="lede">Monthly limits by Monzo category. Recategorise in Monzo if a transaction lands in the wrong bucket.</p>
+
+  {% if message %}<div class="flash ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+
+  <div class="panel">
+    <h2 style="margin-top:0">Add budget</h2>
+    <form method="post" action="/budgets">
+      <label for="category">Category</label>
+      <input id="category" name="category" list="category-list" required placeholder="Eating Out">
+      <datalist id="category-list">
+        {% for c in categories %}
+        <option value="{{ c }}"></option>
+        {% endfor %}
+      </datalist>
+
+      <label for="monthly_limit">Monthly limit (£)</label>
+      <input id="monthly_limit" name="monthly_limit" required placeholder="250">
+
+      <div class="actions" style="margin-top:1rem">
+        <button type="submit">Add budget</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">This month</h2>
+    {% if progress %}
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th class="num">Spent</th>
+          <th class="num">Limit</th>
+          <th class="num">Remaining</th>
+          <th class="num">%</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in progress %}
+        <tr>
+          <td>{{ b.category }}{% if b.over %} <span class="hint" style="color:var(--danger)">over</span>{% endif %}</td>
+          <td class="num">{{ b.spent | money }}</td>
+          <td class="num">{{ b.monthly_limit | money }}</td>
+          <td class="num">{{ b.remaining | money }}</td>
+          <td class="num">{{ b.pct }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No active budgets yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Manage</h2>
+    {% if budgets %}
+    <table>
+      <thead>
+        <tr><th>Category</th><th class="num">Limit</th><th>Active</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for b in budgets %}
+        <tr>
+          <td colspan="4">
+            <form method="post" action="/budgets/{{ b.id }}/update" style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:end">
+              <div>
+                <label>Category</label>
+                <input name="category" value="{{ b.category }}" required>
+              </div>
+              <div>
+                <label>Limit</label>
+                <input name="monthly_limit" value="{{ b.monthly_limit }}" required>
+              </div>
+              <div>
+                <label>Active</label>
+                <select name="active">
+                  <option value="1" {% if b.active %}selected{% endif %}>Yes</option>
+                  <option value="0" {% if not b.active %}selected{% endif %}>No</option>
+                </select>
+              </div>
+              <button type="submit" class="secondary">Save</button>
+            </form>
+            <form method="post" action="/budgets/{{ b.id }}/delete" style="margin-top:0.35rem" onsubmit="return confirm('Delete budget?')">
+              <button type="submit" class="secondary">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+{% endblock %}

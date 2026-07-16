@@ -1,13 +1,13 @@
 # Personal Finance Dashboard
 
-Self-hosted Phase 1 finance dashboard: sync Monzo transactions from Google Sheets, track balance and safe daily spend, and email daily/weekly/monthly reports.
+Self-hosted finance dashboard: sync Monzo transactions from Google Sheets, track balance and bills-aware safe daily spend, manage income rules and budgets, and send lean daily/weekly/monthly digests via email and Pushover.
 
 ## Stack
 
 - FastAPI + SQLAlchemy + PostgreSQL
 - Google Sheets API (read-only Monzo export)
 - APScheduler (sync + reports)
-- Jinja2 dashboard + SMTP email
+- Jinja2 dashboard + SMTP email + Pushover
 
 ## Quick start
 
@@ -19,9 +19,9 @@ cp .env.example .env
 
 2. Place a Google service-account JSON at `credentials/service-account.json`.
 
-3. Share your Monzo Google Sheet with the service account email (Viewer is enough). Set `GOOGLE_SHEET_ID` in `.env`. Default range is `Monzo Transactions!A:O`.
+3. Share your Monzo Google Sheet with the service account email (Viewer is enough). Set `GOOGLE_SHEET_ID` and `GOOGLE_SHEET_RANGE` (e.g. `Personal Account Transactions!A:O`).
 
-4. Configure SMTP (`SMTP_*`, `EMAIL_TO`) for report emails.
+4. Configure SMTP (`SMTP_*`, `SMTP_FROM_NAME=Finance`, `EMAIL_TO`) and Pushover (`PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY`).
 
 5. Start:
 
@@ -31,34 +31,32 @@ docker compose up --build
 
 Open [http://localhost:8000](http://localhost:8000).
 
-6. In **Settings**, seed your current Monzo balance, payday day (1–28), monthly income estimate, and reserved buffer.
+6. Click **Sync now** on Overview to import history (this does **not** change balance until you seed it).
 
-7. Click **Sync now** on Overview (or wait for the 15-minute job).
+7. In **Settings**, set **Current balance** to match Monzo once, plus reserved buffer. Add an **income rule** (e.g. Salary, last Friday of month).
 
-## Monzo sheet columns
+8. On **Bills**, add rent (or Accept a recurring suggestion) so safe spend reserves it until payday.
 
-The live export (and CSV) uses:
+## Digests
 
-| Header | Stored as |
-|--------|-----------|
-| Transaction ID | unique key |
-| Date / Time / Type | date, time, type |
-| Name | merchant |
-| Category | category (Monzo categories only) |
-| Amount / Currency | amount, currency |
-| Notes and #tags / Description | notes, description |
+| Cadence | Default time | Content | Channels |
+|---------|--------------|---------|----------|
+| Daily | 07:00 (your `.env` may differ) | Yesterday spend + top merchants + tiny today outlook; watch-outs only if urgent | Pushover + slim email |
+| Weekly | Monday | Previous Mon–Sun review | Email + short Pushover |
+| Monthly | 1st of month | Previous calendar month | Email + short Pushover |
 
-Recategorise in the Monzo app; the next sync updates category/merchant without double-counting amounts.
+Daily email can be muted with `REPORT_DAILY_EMAIL=false` (Pushover still sends).
 
-## Reports
+## Phase 2 features
 
-| Period | Default schedule (`Europe/London`) |
-|--------|-------------------------------------|
-| Daily | 07:00 |
-| Weekly | Monday 07:30 (previous Mon–Sun) |
-| Monthly | 1st at 08:00 (previous calendar month) |
+- Income rules, upcoming bills, forecast, budgets, recurring suggestions
+- Pay-period stats on Overview/Spending (last payday → next payday)
+- Bills-aware safe spend
 
-Send manually from the **Reports** page. History is stored and viewable in the dashboard.
+```text
+available = balance − reserved_buffer − bills due by payday
+safe_daily = available / days until payday
+```
 
 ## API
 
@@ -69,17 +67,6 @@ Send manually from the **Reports** page. History is stored and viewable in the d
 - `GET /api/reports`
 - `POST /api/reports/{daily|weekly|monthly}/send?send=true`
 
-## Local run (without Docker app)
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-# start postgres via docker compose up postgres -d
-export DATABASE_URL=postgresql+psycopg://finance:finance@localhost:5432/finance
-uvicorn app.main:app --reload --port 8000
-```
-
 ## Out of scope (later)
 
-Budgets, last-Friday income rules, recurring detection, local category overrides, Pushover, AI insights.
+Open Banking direct debits / scheduled payments, auto-mark bills paid, AI insights, net worth.

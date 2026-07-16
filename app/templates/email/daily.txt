@@ -1,16 +1,15 @@
-{{ title }}
-{{ today }}
+☕ Yesterday ({{ yesterday }})
 
-Balance: {{ balance | money }}
-Safe spend today: {{ safe_daily_spend | money }}
-Days until payday: {{ days_until_payday }} ({{ next_payday }})
+Spent {{ spent | money }}
 
-This month:
-Income (estimate): {{ monthly_income | money }}
-Spent: {{ mtd_spent | money }}
-Inflows (actual): {{ mtd_income_actual | money }}
-Savings rate: {% if savings_rate is not none %}{{ savings_rate }}%{% else %}—{% endif %}
+{% if top_merchants %}Top merchants:
+{% for row in top_merchants %}- {{ row.name }} {{ row.total | money }}
+{% endfor %}{% endif %}
+{% if largest %}Largest: {{ largest.merchant or 'Unknown' }} {{ largest.amount | money }}
+{% endif %}
+🌞 Today: {{ balance | money }} · safe {{ safe_daily_spend | money }} · {{ days_until_payday }}d to payday ({{ next_payday }})
 
-{% if top_categories %}Top spending:
-{% for row in top_categories %}- {{ row.name }} {{ row.total | money }}
+{% if urgent_bills or over_budget %}⚠️ Watch outs:
+{% for b in urgent_bills %}- {{ b.name }} due {{ b.next_due_date }} {{ b.amount | money }}
+{% endfor %}{% for b in over_budget %}- Over budget: {{ b.category }} {{ b.spent | money }} / {{ b.monthly_limit | money }}
 {% endfor %}{% endif %}

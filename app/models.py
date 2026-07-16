@@ -2,9 +2,11 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     Date,
     DateTime,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -81,3 +83,71 @@ class ReportRun(Base):
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="sent")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class IncomeRule(Base):
+    __tablename__ = "income_rules"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    frequency: Mapped[str] = mapped_column(String(16), nullable=False, default="monthly")
+    rule_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    rule_value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class UpcomingBill(Base):
+    __tablename__ = "upcoming_bills"
+    __table_args__ = (Index("ix_upcoming_bills_next_due", "next_due_date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    frequency: Mapped[str] = mapped_column(String(16), nullable=False, default="monthly")
+    due_day: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    next_due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    category: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class Budget(Base):
+    __tablename__ = "budgets"
+    __table_args__ = (UniqueConstraint("category", name="uq_budget_category"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    category: Mapped[str] = mapped_column(String(128), nullable=False)
+    monthly_limit: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class BillSuggestion(Base):
+    __tablename__ = "bill_suggestions"
+    __table_args__ = (Index("ix_bill_suggestions_status", "status"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    merchant: Mapped[str] = mapped_column(String(255), nullable=False)
+    typical_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    frequency_guess: Mapped[str] = mapped_column(String(16), nullable=False)
+    last_seen: Mapped[date] = mapped_column(Date, nullable=False)
+    confidence: Mapped[Decimal] = mapped_column(Numeric(5, 2), nullable=False, default=Decimal("0"))
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="suggested")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

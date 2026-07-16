@@ -25,10 +25,15 @@ def get_or_create_settings(db: Session) -> AccountSettings:
     return settings_row
 
 
-def seed_balance(db: Session, amount: Decimal) -> AccountSettings:
+def seed_balance(
+    db: Session, amount: Decimal, *, force_as_of: bool = True
+) -> AccountSettings:
+    """Set the known Monzo balance. Marks as-of so sync only applies newer txs."""
     row = get_or_create_settings(db)
+    changed = (row.current_balance or Decimal("0.00")) != amount
     row.current_balance = amount
-    row.balance_updated_at = datetime.now(timezone.utc)
+    if force_as_of or changed or row.balance_updated_at is None:
+        row.balance_updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(row)
     return row

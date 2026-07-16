@@ -2,26 +2,32 @@
 {% block title %}Settings{% endblock %}
 {% block content %}
   <h1>Settings</h1>
-  <p class="lede">Seed your Monzo balance once. New synced transactions adjust it automatically. Categories are managed in Monzo.</p>
+  <p class="lede">Seed your Monzo balance once. Prefer income rules for payday; day-of-month is only a fallback when no rules exist.</p>
 
-  {% if saved %}
-  <div class="flash ok">Settings saved.</div>
-  {% endif %}
+  {% if saved %}<div class="flash ok">Settings saved.</div>{% endif %}
+  {% if message %}<div class="flash ok">{{ message }}</div>{% endif %}
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
 
   <form method="post" action="/settings" class="panel">
     <label for="current_balance">Current balance (£)</label>
     <input id="current_balance" name="current_balance" value="{{ settings.current_balance }}" required>
-    <p class="hint">Enter the true Monzo balance when first setting up, or to correct drift.</p>
+    <p class="hint">
+      Set this once to match Monzo (or when correcting drift). It is stored in Postgres and survives
+      container restarts. Sync only adjusts it for transactions <em>after</em> this was last changed
+      {% if settings.balance_updated_at %}(as of {{ settings.balance_updated_at }}){% endif %}.
+    </p>
 
-    <label for="payday_day">Payday day of month (1–28)</label>
+    <label for="payday_day">Fallback payday day (1–28)</label>
     <input id="payday_day" name="payday_day" type="number" min="1" max="28" value="{{ settings.payday_day }}" required>
+    <p class="hint">Used only when you have no active income rules.</p>
 
-    <label for="monthly_income_estimate">Monthly income estimate (£)</label>
-    <input id="monthly_income_estimate" name="monthly_income_estimate" value="{{ settings.monthly_income_estimate }}" required>
+    <label for="monthly_income_estimate">Fallback monthly income (£)</label>
+    <input id="monthly_income_estimate" name="monthly_income_estimate" value="{{ settings.monthly_income_estimate }}">
+    <p class="hint">Used only when you have no active income rules. Current from rules: {{ monthly_income | money }}</p>
 
     <label for="reserved_buffer">Reserved buffer (£)</label>
     <input id="reserved_buffer" name="reserved_buffer" value="{{ settings.reserved_buffer }}" required>
-    <p class="hint">Held back from safe daily spend (bills/savings placeholder until Phase 2).</p>
+    <p class="hint">Extra cushion on top of upcoming bills.</p>
 
     <label for="email_to">Report email (optional override)</label>
     <input id="email_to" name="email_to" type="email" value="{{ settings.email_to or '' }}" placeholder="Uses EMAIL_TO from env if blank">
@@ -30,4 +36,64 @@
       <button type="submit">Save settings</button>
     </div>
   </form>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Income rules</h2>
+    <form method="post" action="/settings/income">
+      <label for="income_name">Name</label>
+      <input id="income_name" name="name" required placeholder="Salary">
+
+      <label for="income_amount">Amount (£)</label>
+      <input id="income_amount" name="amount" required placeholder="2600">
+
+      <label for="income_frequency">Frequency</label>
+      <select id="income_frequency" name="frequency">
+        <option value="monthly">Monthly</option>
+        <option value="weekly">Weekly</option>
+      </select>
+
+      <label for="rule_type">Rule</label>
+      <select id="rule_type" name="rule_type">
+        <option value="last_friday">Last Friday of month</option>
+        <option value="day_of_month">Day of month</option>
+        <option value="weekday">Weekday (weekly)</option>
+      </select>
+
+      <label for="rule_value">Rule value (day 1–28, or weekday 0=Mon…6=Sun; blank for last Friday)</label>
+      <input id="rule_value" name="rule_value" type="number" min="0" max="28">
+
+      <div class="actions" style="margin-top:1rem">
+        <button type="submit">Add income rule</button>
+      </div>
+    </form>
+
+    {% if income_rules %}
+    <table style="margin-top:1.25rem">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th class="num">Amount</th>
+          <th>Rule</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in income_rules %}
+        <tr>
+          <td>{{ r.name }}{% if not r.active %} <span class="hint">(inactive)</span>{% endif %}</td>
+          <td class="num">{{ r.amount | money }}</td>
+          <td>{{ r.rule_type }}{% if r.rule_value is not none %} {{ r.rule_value }}{% endif %} · {{ r.frequency }}</td>
+          <td>
+            <form method="post" action="/settings/income/{{ r.id }}/delete" onsubmit="return confirm('Remove this rule?')">
+              <button type="submit" class="secondary">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No income rules yet — add salary (e.g. last Friday) so payday and forecast are accurate.</p>
+    {% endif %}
+  </div>
 {% endblock %}

@@ -1,36 +1,51 @@
 <!DOCTYPE html>
 <html>
 <body style="font-family: Georgia, serif; color: #1c2421; line-height: 1.5;">
-  <h1 style="font-size: 1.4rem;">{{ title }}</h1>
-  <p>{{ start }} → {{ end }}</p>
+  <h1 style="font-size: 1.35rem;">📊 Weekly review</h1>
+  <p style="color:#5c675f;">{{ start }} → {{ end }}</p>
+
   <p>
-    <strong>Week spent:</strong> {{ spent | money }}<br>
-    <strong>Prior week:</strong> {{ prev_spent | money }}
-    ({% if spent_delta > 0 %}+{% endif %}{{ spent_delta | money }})<br>
-    <strong>Week inflows:</strong> {{ income | money }}<br>
-    <strong>Balance:</strong> {{ balance | money }}
+    <strong>Spent:</strong> {{ spent | money }}
+    (last week {{ prev_spent | money }},
+    {% if spent_delta > 0 %}+{% endif %}{{ spent_delta | money }})<br>
+    <strong>Inflows:</strong> {{ income | money }}
   </p>
+
   {% if top_categories %}
-  <h2 style="font-size: 1.15rem;">Top categories</h2>
+  <h2 style="font-size: 1.05rem;">Top categories</h2>
   <ul>
     {% for row in top_categories %}
-    <li>{{ row.name }} {{ row.total | money }}</li>
+    <li>{% if row.name | cat_emoji %}{{ row.name | cat_emoji }} {% endif %}{{ row.name }} {{ row.total | money }}</li>
     {% endfor %}
   </ul>
   {% endif %}
+
   {% if top_merchants %}
-  <h2 style="font-size: 1.15rem;">Top merchants</h2>
+  <h2 style="font-size: 1.05rem;">Top merchants</h2>
   <ul>
     {% for row in top_merchants %}
     <li>{{ row.name }} {{ row.total | money }}</li>
     {% endfor %}
   </ul>
   {% endif %}
+
   {% if largest %}
-  <h2 style="font-size: 1.15rem;">Largest transactions</h2>
+  <h2 style="font-size: 1.05rem;">Largest</h2>
   <ul>
     {% for tx in largest %}
-    <li>{{ tx.date }} — {{ tx.merchant or 'Unknown' }} ({{ tx.category or '—' }}) {{ tx.amount | money }}</li>
+    <li>{{ tx.date }} — {{ tx.merchant or 'Unknown' }} {{ tx.amount | money }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  {% if urgent_bills or over_budget %}
+  <h2 style="font-size: 1.05rem;">⚠️ Watch outs</h2>
+  <ul>
+    {% for b in urgent_bills %}
+    <li>{{ b.name }} due {{ b.next_due_date }} {{ b.amount | money }}</li>
+    {% endfor %}
+    {% for b in over_budget %}
+    <li>Over budget: {{ b.category }} {{ b.spent | money }} / {{ b.monthly_limit | money }}</li>
     {% endfor %}
   </ul>
   {% endif %}

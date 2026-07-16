@@ -2,11 +2,14 @@
 {% block title %}Spending{% endblock %}
 {% block content %}
   <h1>Spending</h1>
-  <p class="lede">Breakdown by Monzo category and merchant. Recategorise transactions in the Monzo app; the next sync will pick up changes.</p>
+  <p class="lede">
+    Pay period {{ period.start }} → {{ period.next_payday }} (through {{ period.today }}).
+    Recategorise in Monzo; the next sync will pick up changes. Budgets stay calendar-month.
+  </p>
 
   <div class="two-col">
     <div class="panel">
-      <h2 style="margin-top:0">Categories (this month)</h2>
+      <h2 style="margin-top:0">Categories (this pay period)</h2>
       {% if mtd.by_category %}
       <table>
         <thead><tr><th>Category</th><th class="num">Spent</th></tr></thead>
@@ -22,7 +25,7 @@
     </div>
 
     <div class="panel">
-      <h2 style="margin-top:0">Top merchants (this month)</h2>
+      <h2 style="margin-top:0">Top merchants (this pay period)</h2>
       {% if mtd.by_merchant %}
       <table>
         <thead><tr><th>Merchant</th><th class="num">Spent</th></tr></thead>
@@ -39,13 +42,42 @@
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">Month comparison</h2>
+    <h2 style="margin-top:0">Budgets (this month)</h2>
+    {% if budgets %}
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th class="num">Spent</th>
+          <th class="num">Limit</th>
+          <th class="num">Remaining</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in budgets %}
+        <tr>
+          <td>{{ b.category }}{% if b.over %} · over{% endif %}</td>
+          <td class="num">{{ b.spent | money }}</td>
+          <td class="num">{{ b.monthly_limit | money }}</td>
+          <td class="num">{{ b.remaining | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="hint"><a href="/budgets">Manage budgets</a></p>
+    {% else %}
+    <p class="hint">No budgets set. <a href="/budgets">Add one</a>.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2 style="margin-top:0">Pay period comparison</h2>
     <table>
       <thead>
         <tr>
           <th></th>
-          <th class="num">This month</th>
-          <th class="num">Last month</th>
+          <th class="num">This period</th>
+          <th class="num">Previous period</th>
         </tr>
       </thead>
       <tbody>
@@ -59,12 +91,17 @@
           <td class="num">{{ mtd.income | money }}</td>
           <td class="num">{{ prev.income | money }}</td>
         </tr>
+        <tr>
+          <td class="hint" colspan="3">
+            This: {{ mtd.start }} → {{ mtd.end }} · Previous: {{ prev.start }} → {{ prev.end }}
+          </td>
+        </tr>
       </tbody>
     </table>
   </div>
 
   <div class="panel">
-    <h2 style="margin-top:0">Largest transactions (this month)</h2>
+    <h2 style="margin-top:0">Largest transactions (this pay period)</h2>
     {% if mtd.largest %}
     <table>
       <thead>
