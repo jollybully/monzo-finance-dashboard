@@ -16,33 +16,133 @@ Self-hosted dashboard for Monzo: sync transactions from Google Sheets, track bil
 
 FastAPI · SQLAlchemy · PostgreSQL · Google Sheets API · APScheduler · Jinja2 · SMTP · Pushover · Docker Compose
 
-## Quick start
+## Prerequisites
 
-1. Copy env and fill in values:
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or Docker Engine + Compose v2)
+- A **Monzo paid plan** with [auto-export to Google Sheets](https://monzo.com/help/monzo-plus/advanced-budgeting-auto-exports) (Extra, Perks, or Max — formerly Plus). Free Monzo can export CSV manually, but this app expects the live sheet Monzo keeps updated.
+- A Google account that owns (or can share) that sheet
+- A Google Cloud project (free tier is fine) for a service account that can *read* that sheet
+
+SMTP and Pushover are **optional**. The dashboard works with only Docker + Sheets; digests need at least one of email or Pushover.
+
+---
+
+## 1. Get your Monzo data into Google Sheets
+
+In the Monzo app, turn on **auto-export live transactions** (paid plans). Monzo creates a spreadsheet and keeps it updated — leave the columns as Monzo provides them.
+
+Copy two things for `.env`:
+
+1. **Spreadsheet ID** from the URL:
+
+```text
+https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit
+```
+
+2. **Tab name** (bottom of the sheet) for `GOOGLE_SHEET_RANGE`, e.g. `Personal Account Transactions!A:O` or `Monzo Transactions!A:O`.
+
+---
+
+## 2. Create a Google service account
+
+1. Open [Google Cloud Console](https://console.cloud.google.com/) and create (or pick) a project.
+2. Enable **Google Sheets API** for that project (*APIs & Services → Library*).
+3. Create a **service account** (*IAM & Admin → Service Accounts → Create*).
+4. Create a JSON key for it and download the file.
+5. Save it locally as:
+
+```text
+credentials/service-account.json
+```
+
+(`credentials/` is gitignored except an empty `.gitkeep`.)
+
+6. Open the JSON and copy `client_email` (looks like `…@….iam.gserviceaccount.com`).
+7. In Google Sheets, **Share** your Monzo spreadsheet with that email as **Viewer**.
+
+---
+
+## 3. Configure environment
 
 ```bash
+git clone <this-repo>
+cd finance-dashboard
 cp .env.example .env
 ```
 
-2. Place a Google service-account JSON at `credentials/service-account.json`.
+Edit `.env` and set at least:
 
-3. Share your Monzo Google Sheet with the service account email (Viewer is enough). Set `GOOGLE_SHEET_ID` and `GOOGLE_SHEET_RANGE` (e.g. `Personal Account Transactions!A:O`).
+| Variable | What to put |
+|----------|-------------|
+| `GOOGLE_SHEET_ID` | ID from the spreadsheet URL |
+| `GOOGLE_SHEET_RANGE` | Tab + columns, e.g. `Personal Account Transactions!A:O` |
+| `APP_TZ` | Your timezone, e.g. `Europe/London` |
 
-4. Configure SMTP (`SMTP_*`, `SMTP_FROM_NAME=Finance`, `EMAIL_TO`) and Pushover (`PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY`).
+`GOOGLE_CREDENTIALS_FILE` defaults to `/credentials/service-account.json` inside the container (Compose mounts `./credentials` there). Leave it unless you change the mount.
 
-5. Start:
+### Digests (optional)
+
+**Email (SMTP)** — e.g. Gmail app password or any SMTP relay:
+
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`
+- `SMTP_FROM`, `SMTP_FROM_NAME`, `EMAIL_TO`
+- `SMTP_USE_TLS=true`
+
+**Pushover** — [pushover.net](https://pushover.net) app + user keys:
+
+- `PUSHOVER_APP_TOKEN`, `PUSHOVER_USER_KEY`
+- Optional: `PUSHOVER_DEVICE`, `PUSHOVER_ENABLED=true`
+
+You can use email only, Pushover only, or both. Set `REPORT_DAILY_EMAIL=false` to keep daily Pushover but skip the daily email.
+
+Schedule knobs (defaults shown in `.env.example`): `REPORT_*_HOUR` / `REPORT_*_MINUTE`, `REPORT_*_ENABLED`, `SYNC_INTERVAL_MINUTES`.
+
+---
+
+## 4. Start the stack
 
 ```bash
 docker compose up --build
 ```
 
-Open [http://localhost:8000](http://localhost:8000).
+- App: [http://localhost:8000](http://localhost:8000)
+- Health: [http://localhost:8000/health](http://localhost:8000/health)
 
-6. Click **Sync now** on Overview to import history (this does **not** change balance until you seed it).
+Postgres is included; Compose overrides `DATABASE_URL` to point at the `postgres` service. Data persists in the `postgres_data` volume.
 
-7. In **Settings**, set **Current balance** to match Monzo once, plus reserved buffer. Add an **income rule** (e.g. Salary, last Friday of month).
+Stop with `Ctrl+C`, or run detached:
 
-8. On **Bills**, add rent (or accept a recurring suggestion) so safe spend reserves it until payday.
+```bash
+docker compose up --build -d
+docker compose logs -f finance-app
+```
+
+---
+
+## 5. First-run setup in the UI
+
+1. **Overview → Sync now** — imports history from the sheet. This does **not** set your balance until you seed it.
+2. **Settings → Current balance** — set once to match Monzo (and a reserved buffer if you want a cushion).
+3. **Settings → Income rule** — e.g. Salary, last Friday of month (drives payday and safe spend).
+4. **Bills** — add rent and other commitments, or **Scan transactions** and accept suggestions. Weekly bills are reserved for *every* occurrence until payday.
+5. Optionally set **Budgets** by Monzo category.
+
+After that, sync runs on `SYNC_INTERVAL_MINUTES` (default 15). Balance only moves for transactions *after* you last updated the seeded balance.
+
+---
+
+## Keeping it running
+
+Compose uses `restart: unless-stopped`. Containers come back when Docker starts, as long as you didn’t `docker compose stop` them.
+
+On a laptop:
+
+1. Enable **Start Docker Desktop when you log in**.
+2. Leave the stack running (`docker compose up -d`).
+
+If the machine was asleep through a scheduled digest, **startup catch-up** sends at most **one** missed digest per cadence (daily: same day within 18h; weekly: Mon–Wed; monthly: days 1–3). It does not backfill a multi-day backlog. You can always send manually from **Reports**.
+
+---
 
 ## Safe spend
 
@@ -50,6 +150,10 @@ Open [http://localhost:8000](http://localhost:8000).
 available = balance − reserved_buffer − bills due by payday
 safe_daily = available / days until payday
 ```
+
+Recurring bills (especially weekly) count **every** charge from today through payday, not just the next one.
+
+---
 
 ## Digests
 
@@ -59,9 +163,9 @@ safe_daily = available / days until payday
 | Weekly | Monday | Previous Mon–Sun review | Email + short Pushover |
 | Monthly | 1st of month | Previous calendar month | Email + short Pushover |
 
-Mute daily email with `REPORT_DAILY_EMAIL=false` (Pushover still sends). Times follow `APP_TZ`.
+Times follow `APP_TZ`.
 
-If the machine was asleep through a scheduled slot, startup catch-up sends **at most one** missed digest per cadence (daily same day within 18h; weekly Mon–Wed; monthly days 1–3). It does not backfill a multi-day backlog.
+---
 
 ## API
 
@@ -72,14 +176,29 @@ If the machine was asleep through a scheduled slot, startup catch-up sends **at 
 - `GET /api/reports`
 - `POST /api/reports/{daily|weekly|monthly}/send?send=true`
 
+---
+
 ## Security
 
-This repo is meant to be public, but your money data is not.
+This repo is meant to be public; your money data is not.
 
-- **Never commit** `.env` or `credentials/service-account.json` — both are gitignored
+- **Never commit** `.env` or `credentials/service-account.json` (gitignored)
 - Use `.env.example` as a template only
 - Share the Google Sheet **Viewer-only** with the service account email
-- Keep SMTP passwords and Pushover tokens in env / a secrets manager in production
+- Keep SMTP passwords and Pushover tokens out of git; use a secrets manager in production
+
+---
+
+## Troubleshooting
+
+| Symptom | Check |
+|---------|--------|
+| Sync fails / no rows | Sheet shared with SA email? Correct `GOOGLE_SHEET_ID` / tab name in `GOOGLE_SHEET_RANGE`? JSON at `credentials/service-account.json`? |
+| Digests not arriving | SMTP and/or Pushover filled in? `REPORT_*_ENABLED`? App timezone? Try **Reports → Send daily** |
+| Balance looks wrong | Re-seed **Current balance** in Settings; historical sync won’t rewrite a seeded balance |
+| Port 8000 in use | Change the host port in `docker-compose.yml` (`"8001:8000"`) |
+
+---
 
 ## Out of scope (later)
 
