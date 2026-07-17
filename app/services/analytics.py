@@ -8,7 +8,9 @@ from decimal import Decimal
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from app.models import Transaction
+from app.models import Transaction, UpcomingBill
+
+NON_DISCRETIONARY_CATEGORIES = frozenset({"bills", "savings", "transfers"})
 
 
 @dataclass
@@ -27,6 +29,34 @@ class PeriodStats:
     by_category: list[NamedTotal]
     by_merchant: list[NamedTotal]
     largest: list[Transaction]
+
+
+def normalize_merchant(name: str | None) -> str:
+    if not name:
+        return ""
+    return " ".join(name.strip().lower().split())
+
+
+def _normalize_category(category: str | None) -> str:
+    if not category:
+        return ""
+    return category.strip().lower().replace("_", " ")
+
+
+def active_bill_merchant_keys(db: Session) -> set[str]:
+    return {
+        normalize_merchant(b.name)
+        for b in db.query(UpcomingBill).filter(UpcomingBill.active.is_(True)).all()
+        if normalize_merchant(b.name)
+    }
+
+
+def is_non_discretionary(tx: Transaction, bill_keys: set[str]) -> bool:
+    """True for fixed outflows: Bills/Savings/Transfers or active Upcoming Bill merchants."""
+    if _normalize_category(tx.category) in NON_DISCRETIONARY_CATEGORIES:
+        return True
+    key = normalize_merchant(tx.merchant)
+    return bool(key) and key in bill_keys
 
 
 def _month_bounds(today: date) -> tuple[date, date]:
@@ -53,21 +83,26 @@ def summarize_period(
     top_n: int = 5,
 ) -> PeriodStats:
     txs = query_transactions(db, start, end)
+    bill_keys = active_bill_merchant_keys(db)
     income = Decimal("0.00")
     spent = Decimal("0.00")
     cat: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     merch: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+    discretionary_outflows: list[Transaction] = []
 
     for tx in txs:
         amount = tx.amount or Decimal("0.00")
         if amount > 0:
             income += amount
-        else:
-            spent += abs(amount)
-            category = tx.category or "Uncategorised"
-            merchant = tx.merchant or "Unknown"
-            cat[category] += abs(amount)
-            merch[merchant] += abs(amount)
+            continue
+        if is_non_discretionary(tx, bill_keys):
+            continue
+        spent += abs(amount)
+        category = tx.category or "Uncategorised"
+        merchant = tx.merchant or "Unknown"
+        cat[category] += abs(amount)
+        merch[merchant] += abs(amount)
+        discretionary_outflows.append(tx)
 
     by_category = [
         NamedTotal(name=k, total=v)
@@ -78,8 +113,8 @@ def summarize_period(
         for k, v in sorted(merch.items(), key=lambda item: item[1], reverse=True)[:top_n]
     ]
     largest = sorted(
-        [t for t in txs if (t.amount or 0) < 0],
-        key=lambda t: abs(t.amount),
+        discretionary_outflows,
+        key=lambda t: abs(t.amount or Decimal("0.00")),
         reverse=True,
     )[:top_n]
 

@@ -5,7 +5,8 @@
   <p class="lede">
     Pay period {{ period.start | shortdate }} → {{ period.next_payday | shortdate }}
     (through {{ period.today | shortdate }}). Recategorise in Monzo; the next sync will pick up changes.
-    Budgets stay calendar-month.
+    Spend and top merchants exclude configured bills plus Monzo Bills, Savings, and Transfers.
+    Budgets stay calendar-month and still count all outflows in a category.
   </p>
 
   <div class="two-col">

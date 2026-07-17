@@ -13,6 +13,8 @@ from sqlalchemy.orm import Session
 
 from app.models import BillSuggestion, Transaction
 from app.services.analytics import (
+    active_bill_merchant_keys,
+    is_non_discretionary,
     pay_period_to_date_stats,
     previous_pay_period_stats,
     query_transactions,
@@ -62,10 +64,13 @@ def _period_maps(
     db: Session, start: date, end: date
 ) -> tuple[dict[str, Decimal], dict[str, Decimal]]:
     txs = query_transactions(db, start, end)
+    bill_keys = active_bill_merchant_keys(db)
     cat: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     merch: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     for tx in txs:
         if (tx.amount or 0) >= 0:
+            continue
+        if is_non_discretionary(tx, bill_keys):
             continue
         amount = abs(tx.amount)
         cat[tx.category or "Uncategorised"] += amount
@@ -97,6 +102,7 @@ def _deltas(
 
 
 def _habit_slice(db: Session, start: date, end: date, spent: Decimal) -> dict[str, Any]:
+    bill_keys = active_bill_merchant_keys(db)
     txs = (
         db.query(Transaction)
         .filter(
@@ -110,6 +116,8 @@ def _habit_slice(db: Session, start: date, end: date, spent: Decimal) -> dict[st
     weekend = Decimal("0.00")
     by_merchant: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     for tx in txs:
+        if is_non_discretionary(tx, bill_keys):
+            continue
         amount = abs(tx.amount or Decimal("0.00"))
         if tx.date.weekday() >= 5:
             weekend += amount
@@ -133,10 +141,11 @@ def _habit_slice(db: Session, start: date, end: date, spent: Decimal) -> dict[st
 
 
 def _outliers(db: Session, start: date, end: date, *, top_n: int = 3) -> list[dict[str, Any]]:
+    bill_keys = active_bill_merchant_keys(db)
     txs = [
         tx
         for tx in query_transactions(db, start, end)
-        if (tx.amount or 0) < 0
+        if (tx.amount or 0) < 0 and not is_non_discretionary(tx, bill_keys)
     ]
     if not txs:
         return []

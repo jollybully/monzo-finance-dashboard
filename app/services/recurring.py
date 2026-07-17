@@ -8,13 +8,8 @@ from statistics import median
 from sqlalchemy.orm import Session
 
 from app.models import BillSuggestion, Transaction, UpcomingBill
+from app.services.analytics import active_bill_merchant_keys, normalize_merchant
 from app.services.bills import create_bill
-
-
-def _normalize_merchant(name: str | None) -> str:
-    if not name:
-        return ""
-    return " ".join(name.strip().lower().split())
 
 
 def detect_recurring(db: Session, *, today: date | None = None) -> list[BillSuggestion]:
@@ -22,10 +17,7 @@ def detect_recurring(db: Session, *, today: date | None = None) -> list[BillSugg
     today = today or date.today()
     start = today - timedelta(days=183)
 
-    active_merchants = {
-        _normalize_merchant(b.name)
-        for b in db.query(UpcomingBill).filter(UpcomingBill.active.is_(True)).all()
-    }
+    active_merchants = active_bill_merchant_keys(db)
 
     txs = (
         db.query(Transaction)
@@ -42,14 +34,14 @@ def detect_recurring(db: Session, *, today: date | None = None) -> list[BillSugg
     by_merchant: dict[str, list[Transaction]] = defaultdict(list)
     display_name: dict[str, str] = {}
     for tx in txs:
-        key = _normalize_merchant(tx.merchant)
+        key = normalize_merchant(tx.merchant)
         if not key:
             continue
         by_merchant[key].append(tx)
         display_name[key] = tx.merchant or key
 
     existing = {
-        _normalize_merchant(s.merchant): s
+        normalize_merchant(s.merchant): s
         for s in db.query(BillSuggestion).all()
     }
 

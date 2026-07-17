@@ -137,8 +137,10 @@ docker compose logs -f finance-app
 1. **Overview → Sync now** — imports history from the sheet. This does **not** set your balance until you seed it.
 2. **Settings → Current balance** — set once to match Monzo (and a reserved buffer if you want a cushion).
 3. **Settings → Income rule** — e.g. Salary, last Friday of month (drives payday and safe spend).
-4. **Bills** — add rent and other commitments, or **Scan transactions** and accept suggestions. Weekly bills are reserved for *every* occurrence until payday.
+4. **Bills** — add rent and other commitments, or **Scan transactions** and accept suggestions. Weekly bills are reserved for *every* occurrence until payday. Name each bill to match Monzo’s **Name** column (accepting a suggestion does this automatically) so those merchants drop out of discretionary spend and top-merchant rankings.
 5. Optionally set **Budgets** by Monzo category.
+
+Spend digests (overview, spending, emails, insights) treat Monzo **Bills**, **Savings**, and **Transfers** categories — plus merchants that match active Upcoming Bills — as non-discretionary. Budgets and bill detection still see the full outflow history. Keep pot top-ups and internal transfers in Savings or Transfers in Monzo.
 
 After that, sync runs on `SYNC_INTERVAL_MINUTES` (default 15). Balance only moves for transactions *after* you last updated the seeded balance.
 
