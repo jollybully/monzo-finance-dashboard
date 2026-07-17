@@ -10,6 +10,12 @@
   {% if sync_error %}
   <div class="flash error">{{ sync_error }}</div>
   {% endif %}
+  {% if insight_message %}
+  <div class="flash ok">Coaching refreshed.</div>
+  {% endif %}
+  {% if insight_error %}
+  <div class="flash error">{{ insight_error }}</div>
+  {% endif %}
 
   <div class="metrics">
     <div class="metric">
@@ -29,6 +35,61 @@
       <span class="value compact">{{ safe.next_payday | shortdate }}</span>
     </div>
   </div>
+
+  {% if insights_enabled %}
+  <div class="panel insight-panel">
+    <div class="insight-header">
+      <h2>This week’s coaching</h2>
+      <form method="post" action="/insights/refresh">
+        <button type="submit" class="secondary">Refresh</button>
+      </form>
+    </div>
+    {% if insight and insight.ok %}
+      {% if insight.coach_status %}
+      <p class="insight-status status-{{ insight.coach_status }}">
+        {% if insight.coach_status == 'on_track' %}On track
+        {% elif insight.coach_status == 'at_risk' %}At risk
+        {% elif insight.coach_status == 'overspending' %}Overspending
+        {% else %}{{ insight.coach_status|replace('_', ' ')|title }}{% endif %}
+      </p>
+      {% endif %}
+      <p class="insight-headline">{{ insight.headline }}</p>
+      {% if insight.actions %}
+      <h3>Actions</h3>
+      <ul class="insight-list">
+        {% for a in insight.actions %}
+        <li>
+          {{ a.text }}
+          {% if a.impact %}<span class="insight-impact">{{ a.impact }}</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if insight.leaks %}
+      <h3>Leaks</h3>
+      <ul class="insight-list">
+        {% for item in insight.leaks %}
+        <li>{{ item.text }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      {% if insight.habits %}
+      <h3>Habits</h3>
+      <ul class="insight-list">
+        {% for item in insight.habits %}
+        <li>{{ item.text }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <p class="hint">
+        Generated
+        {% if insight.created_at %}{{ insight.created_at | shortdatetime }}{% else %}just now{% endif %}
+      </p>
+    {% else %}
+      <p class="hint">No coaching yet. Refresh to generate insights from your pay-period facts.</p>
+    {% endif %}
+  </div>
+  {% endif %}
 
   <div class="panel">
     <h2>Safe spend breakdown</h2>

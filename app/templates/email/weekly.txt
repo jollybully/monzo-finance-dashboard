@@ -17,3 +17,12 @@ Inflows: {{ income | money }}
 {% for b in urgent_bills %}- {{ b.name }} due {{ b.next_due_date }} {{ b.amount | money }}
 {% endfor %}{% for b in over_budget %}- Over budget: {{ b.category }} {{ b.spent | money }} / {{ b.monthly_limit | money }}
 {% endfor %}{% endif %}
+{% if insight and insight.ok %}
+Coach: {{ insight.headline }}
+{% if insight.actions %}Actions:
+{% for a in insight.actions %}- {{ a.text }}{% if a.impact %} — {{ a.impact }}{% endif %}
+{% endfor %}{% endif %}{% if insight.leaks %}Leaks:
+{% for item in insight.leaks %}- {{ item.text }}
+{% endfor %}{% endif %}{% if insight.habits %}Habits:
+{% for item in insight.habits %}- {{ item.text }}
+{% endfor %}{% endif %}{% endif %}

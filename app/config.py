@@ -42,6 +42,10 @@ class Settings(BaseSettings):
 
     sync_interval_minutes: int = 15
 
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    insights_enabled: bool = True
+
 
 @lru_cache
 def get_settings() -> Settings:

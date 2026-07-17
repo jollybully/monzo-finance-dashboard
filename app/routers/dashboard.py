@@ -47,6 +47,11 @@ from app.services.recurring import (
 from app.services.reports import generate_and_send_report
 from app.services.safe_spend import calculate_safe_spend
 from app.services.sheets_sync import sync_transactions
+from app.services.insights import (
+    generate_insight,
+    get_latest_insight,
+    insights_configured,
+)
 
 router = APIRouter(tags=["dashboard"])
 templates = Jinja2Templates(directory="app/templates")
@@ -116,6 +121,7 @@ def overview(request: Request, db: Session = Depends(get_db)):
     stats = pay_period_to_date_stats(db)
     income = monthly_income_total(db)
     rate = savings_rate(income, stats.spent)
+    insight = get_latest_insight(db, ok_only=True) if insights_configured() else None
     return templates.TemplateResponse(
         request,
         "overview.html",
@@ -127,10 +133,34 @@ def overview(request: Request, db: Session = Depends(get_db)):
             "mtd": stats,
             "income": income,
             "savings_rate": rate,
+            "insights_enabled": insights_configured(),
+            "insight": insight,
             "sync_message": request.query_params.get("sync"),
             "sync_error": request.query_params.get("error"),
+            "insight_error": request.query_params.get("insight_error"),
+            "insight_message": request.query_params.get("insight"),
         },
     )
+
+
+@router.post("/insights/refresh")
+def refresh_insights(db: Session = Depends(get_db)):
+    if not insights_configured():
+        return RedirectResponse(
+            url=f"/?insight_error={quote('Gemini API key not configured')}",
+            status_code=303,
+        )
+    try:
+        view = generate_insight(db, force=True)
+        if view.ok:
+            return RedirectResponse(url="/?insight=updated", status_code=303)
+        err = view.error or "Insight generation failed"
+        return RedirectResponse(url=f"/?insight_error={quote(err)}", status_code=303)
+    except Exception as exc:  # noqa: BLE001
+        return RedirectResponse(
+            url=f"/?insight_error={quote(str(exc))}",
+            status_code=303,
+        )
 
 
 @router.post("/sync")

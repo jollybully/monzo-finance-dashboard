@@ -19,6 +19,7 @@ from app.services.budgets import over_budget
 from app.services.email import send_email
 from app.services.income import monthly_income_total
 from app.services.pushover import send_pushover
+from app.services.insights import ensure_insight_for_report
 from app.services.safe_spend import calculate_safe_spend
 
 logger = logging.getLogger(__name__)
@@ -168,6 +169,7 @@ def build_weekly_report(
     delta = week.spent - prev.spent
     overs = over_budget(db, today)
     urgent_bills = _urgent_bills(db, today, within_days=7)
+    insight = ensure_insight_for_report(db, today)
     priority = 0
 
     context = {
@@ -183,6 +185,7 @@ def build_weekly_report(
         "largest": week.largest,
         "urgent_bills": urgent_bills,
         "over_budget": overs,
+        "insight": insight,
     }
     html, text = _render("weekly", context)
     sign = "+" if delta > 0 else ""
@@ -203,6 +206,8 @@ def build_weekly_report(
         push_lines.append(
             f"⚠ {len(overs)} categor{'y' if len(overs) == 1 else 'ies'} over budget"
         )
+    if insight and insight.ok and insight.headline:
+        push_lines.append(f"Coach: {insight.headline}")
     push_body = "\n".join(push_lines)
 
     return subject, html, text, start, end, push_title, push_body, priority

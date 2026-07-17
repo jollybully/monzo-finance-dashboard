@@ -222,6 +222,74 @@ h3 {
   margin-bottom: 1rem;
 }
 
+.insight-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.35rem;
+}
+
+.insight-header h2 {
+  margin: 0;
+}
+
+.insight-status {
+  display: inline-block;
+  margin: 0.35rem 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.insight-status.status-on_track {
+  color: var(--ok);
+}
+
+.insight-status.status-at_risk {
+  color: var(--warn);
+}
+
+.insight-status.status-overspending {
+  color: var(--danger);
+}
+
+.insight-headline {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  line-height: 1.35;
+}
+
+.insight-list {
+  margin: 0.25rem 0 0.85rem;
+  padding-left: 1.15rem;
+}
+
+.insight-list li {
+  margin-bottom: 0.35rem;
+}
+
+.insight-impact {
+  display: block;
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin-top: 0.1rem;
+}
+
+.insight-panel > h3 {
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
 .flash {
   padding: 0.65rem 0.9rem;
   margin-bottom: 0.9rem;

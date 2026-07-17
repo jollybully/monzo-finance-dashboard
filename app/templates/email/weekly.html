@@ -49,5 +49,33 @@
     {% endfor %}
   </ul>
   {% endif %}
+
+  {% if insight and insight.ok %}
+  <h2 style="font-size: 1.05rem;">Coach</h2>
+  <p><strong>{{ insight.headline }}</strong></p>
+  {% if insight.actions %}
+  <ul>
+    {% for a in insight.actions %}
+    <li>{{ a.text }}{% if a.impact %} — {{ a.impact }}{% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if insight.leaks %}
+  <p style="margin-bottom:0.25rem;"><strong>Leaks</strong></p>
+  <ul>
+    {% for item in insight.leaks %}
+    <li>{{ item.text }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if insight.habits %}
+  <p style="margin-bottom:0.25rem;"><strong>Habits</strong></p>
+  <ul>
+    {% for item in insight.habits %}
+    <li>{{ item.text }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% endif %}
 </body>
 </html>

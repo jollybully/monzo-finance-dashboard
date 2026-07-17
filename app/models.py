@@ -151,3 +151,23 @@ class BillSuggestion(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class InsightRun(Base):
+    __tablename__ = "insight_runs"
+    __table_args__ = (Index("ix_insight_runs_created_at", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    headline: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    coach_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    actions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    leaks_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    habits_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    facts_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    facts_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

@@ -11,10 +11,11 @@ Self-hosted dashboard for Monzo: sync transactions from Google Sheets, track bil
 - **30-day forecast** — income rules and bills projected forward (not everyday spend)
 - **Category budgets** — calendar-month limits with progress at a glance
 - **Digests** — daily / weekly / monthly via email and Pushover
+- **AI coaching** — optional Gemini insights on Overview and in the weekly digest (pace vs safe daily, leaks, habits)
 
 ## Stack
 
-FastAPI · SQLAlchemy · PostgreSQL · Google Sheets API · APScheduler · Jinja2 · SMTP · Pushover · Docker Compose
+FastAPI · SQLAlchemy · PostgreSQL · Google Sheets API · APScheduler · Jinja2 · SMTP · Pushover · Gemini (optional) · Docker Compose
 
 ## Prerequisites
 
@@ -97,6 +98,18 @@ You can use email only, Pushover only, or both. Set `REPORT_DAILY_EMAIL=false` t
 
 Schedule knobs (defaults shown in `.env.example`): `REPORT_*_HOUR` / `REPORT_*_MINUTE`, `REPORT_*_ENABLED`, `SYNC_INTERVAL_MINUTES`.
 
+### AI coaching (optional)
+
+Get a free API key from [Google AI Studio](https://aistudio.google.com/apikey), then set:
+
+- `GEMINI_API_KEY` — required to show coaching
+- `GEMINI_MODEL` — default `gemini-2.5-flash` (free Flash tier)
+- `INSIGHTS_ENABLED=true`
+
+Coaching appears on **Overview** (with Refresh) and in the **weekly** digest. Daily digests stay numbers-only. Python computes the facts; Gemini only writes the narrative.
+
+**Privacy:** on the Gemini free tier, prompts may be used by Google to improve products. This app sends aggregates and a few named outliers — not your full transaction history. Keep the key in `.env` only.
+
 ---
 
 ## 4. Start the stack
@@ -160,7 +173,7 @@ Recurring bills (especially weekly) count **every** charge from today through pa
 | Cadence | Default time | Content | Channels |
 |---------|--------------|---------|----------|
 | Daily | 07:00 | Yesterday spend + top merchants + tiny today outlook | Pushover + slim email |
-| Weekly | Monday | Previous Mon–Sun review | Email + short Pushover |
+| Weekly | Monday | Previous Mon–Sun review + optional Gemini coach | Email + short Pushover |
 | Monthly | 1st of month | Previous calendar month | Email + short Pushover |
 
 Times follow `APP_TZ`.
@@ -202,4 +215,4 @@ This repo is meant to be public; your money data is not.
 
 ## Out of scope (later)
 
-Open Banking direct debits, auto-mark bills paid, AI insights, net worth.
+Open Banking direct debits, auto-mark bills paid, net worth.
