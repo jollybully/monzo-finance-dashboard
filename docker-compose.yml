@@ -12,13 +12,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    ports:
-      - "5432:5432"
+    # ports:
+    #   - "5432:5432"
+    restart: unless-stopped
 
   finance-app:
     build: .
     ports:
-      - "8000:8000"
+      - "18000:8000"
     env_file:
       - .env
     environment:
