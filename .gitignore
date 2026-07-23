@@ -11,3 +11,7 @@ venv/
 *.egg-info/
 .pytest_cache/
 .DS_Store
+.cursor/*
+!.cursor/mcp.json.example
+*.dump
+finance.dump

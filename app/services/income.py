@@ -172,6 +172,65 @@ def current_pay_period(db: Session, today: date | None = None) -> PayPeriod:
     )
 
 
+@dataclass
+class PayPeriodBounds:
+    """Inclusive calendar span for a pay cycle (payday → day before next payday)."""
+
+    start: date
+    end: date
+    next_payday: date
+    is_current: bool
+    days_elapsed: int
+    days_full: int
+
+
+def iter_pay_periods(
+    db: Session, *, count: int = 6, today: date | None = None
+) -> list[PayPeriodBounds]:
+    """Walk payday→payday backwards. Index 0 is the current (possibly open) period."""
+    today = today or date.today()
+    count = max(1, min(int(count), 24))
+    periods: list[PayPeriodBounds] = []
+
+    current = current_pay_period(db, today)
+    full_end = current.next_payday - timedelta(days=1)
+    days_full = max((current.next_payday - current.start).days, 1)
+    days_elapsed = max((today - current.start).days + 1, 1)
+    periods.append(
+        PayPeriodBounds(
+            start=current.start,
+            end=min(today, full_end),
+            next_payday=current.next_payday,
+            is_current=True,
+            days_elapsed=days_elapsed,
+            days_full=days_full,
+        )
+    )
+
+    cursor_end = current.start - timedelta(days=1)
+    while len(periods) < count:
+        prior_start = previous_pay_date(db, cursor_end)
+        if prior_start > cursor_end:
+            break
+        # Avoid infinite loops if payday logic collapses
+        if periods and prior_start == periods[-1].start:
+            break
+        days_full = max((cursor_end - prior_start).days + 1, 1)
+        periods.append(
+            PayPeriodBounds(
+                start=prior_start,
+                end=cursor_end,
+                next_payday=cursor_end + timedelta(days=1),
+                is_current=False,
+                days_elapsed=days_full,
+                days_full=days_full,
+            )
+        )
+        cursor_end = prior_start - timedelta(days=1)
+
+    return periods
+
+
 def upcoming_income(
     db: Session,
     start: date,

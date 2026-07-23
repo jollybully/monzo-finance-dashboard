@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "finance-dashboard": {
+      "command": "/ABSOLUTE/PATH/TO/finance-dashboard/.venv/bin/python",
+      "args": [
+        "-m",
+        "mcp_server"
+      ],
+      "env": {
+        "PYTHONPATH": "/ABSOLUTE/PATH/TO/finance-dashboard",
+        "DATABASE_URL": "postgresql+psycopg://finance:CHANGE_ME@127.0.0.1:5432/finance"
+      }
+    }
+  }
+}

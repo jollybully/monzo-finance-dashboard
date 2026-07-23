@@ -12,6 +12,7 @@ Self-hosted dashboard for Monzo: sync transactions from Google Sheets, track bil
 - **Category budgets** — calendar-month limits with progress at a glance
 - **Digests** — daily / weekly / monthly via email and Pushover
 - **AI coaching** — optional Gemini insights on Overview and in the weekly digest (pace vs safe daily, leaks, habits)
+- **Finance MCP** — read-only Cursor tools for spend/merchant/bill interrogation (pay-period pace, 4- vs 5-week comparisons)
 
 ## Stack
 
@@ -193,6 +194,41 @@ Times follow `APP_TZ`.
 
 ---
 
+## Finance MCP (Cursor)
+
+Read-only MCP server so Cursor can query discretionary spend, merchants, bills, safe spend, and pay-period comparisons (normalised for 4- vs 5-week months).
+
+### Local setup
+
+1. Start the stack (`docker compose up -d`) — Postgres is published on **`127.0.0.1:5432`** only.
+2. Install host deps:
+
+```bash
+# Use Python 3.12 (matches the Docker image; 3.14 breaks SQLAlchemy 2.0.36)
+python3.12 -m venv .venv
+.venv/bin/pip install -r requirements-mcp.txt
+```
+
+3. Copy [`.cursor/mcp.json.example`](.cursor/mcp.json.example) → `.cursor/mcp.json`, set absolute paths and `DATABASE_URL`, then restart Cursor / reload MCP servers. (`.cursor/mcp.json` is gitignored.)
+4. Ask in chat, e.g.:
+   - “Top-level health check for this pay period vs last.”
+   - “Compare the last 6 pay periods by daily discretionary spend.”
+   - “Deep dive Amazon over my full history.”
+   - “What’s reserved for bills, and what’s my safe daily?”
+
+Spend tools default to **discretionary** totals (Bills / Savings / Transfers + Upcoming Bill merchants excluded). Name bills to match Monzo’s **Name** column so rent etc. stay out of lifestyle rankings.
+
+### Unraid / always-on box
+
+Run the dashboard + Postgres on Unraid as usual. For Cursor on your Mac:
+
+- Point `DATABASE_URL` in `.cursor/mcp.json` at the Unraid host (LAN IP), e.g. `postgresql+psycopg://finance:…@192.168.x.x:5432/finance`
+- Prefer binding Postgres to the LAN/tailnet interface only — **not** the public internet
+- The MCP process still runs **where Cursor is** (stdio); only the DB needs to be reachable
+- Later: an HTTP MCP sidecar on Unraid is optional if you want agents on the box itself
+
+---
+
 ## Security
 
 This repo is meant to be public; your money data is not.
@@ -201,6 +237,7 @@ This repo is meant to be public; your money data is not.
 - Use `.env.example` as a template only
 - Share the Google Sheet **Viewer-only** with the service account email
 - Keep SMTP passwords and Pushover tokens out of git; use a secrets manager in production
+- Keep Postgres / MCP on localhost or a private network only; the app has no auth
 
 ---
 

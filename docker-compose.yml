@@ -12,8 +12,9 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    # ports:
-    #   - "5432:5432"
+    ports:
+      # Localhost only — for host MCP / tooling. Do not bind 0.0.0.0 on Unraid.
+      - "127.0.0.1:5432:5432"
     restart: unless-stopped
 
   finance-app:
