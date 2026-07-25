@@ -57,8 +57,10 @@
 
   function moneyTooltip(context) {
     const label = context.dataset.label ? context.dataset.label + ": " : "";
-    const value = context.parsed.y != null ? context.parsed.y : context.parsed.x;
-    if (value == null) {
+    // Horizontal bars (indexAxis: "y") store the amount on x; the category index on y.
+    const horizontal = context.chart?.options?.indexAxis === "y";
+    const value = horizontal ? context.parsed.x : context.parsed.y;
+    if (value == null || Number.isNaN(value)) {
       return label;
     }
     return (
