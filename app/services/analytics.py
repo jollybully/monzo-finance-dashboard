@@ -439,3 +439,158 @@ def merchant_detail(
             for k in sorted(by_month.keys())
         ],
     }
+
+
+def _category_label(category: str | None) -> str:
+    return category or "Uncategorised"
+
+
+def _category_outflows(
+    db: Session,
+    name: str,
+    start: date,
+    end: date,
+    *,
+    discretionary: bool = True,
+) -> tuple[str, list[Transaction], Decimal, Decimal]:
+    """Match outflows in one category.
+
+    Returns display name, matched txs, discretionary spend total, and all-outflow total
+    (for share % when drilling into Bills/Savings/Transfers).
+    """
+    target = name.strip() or "Uncategorised"
+    target_is_fixed = _normalize_category(target) in NON_DISCRETIONARY_CATEGORIES
+    txs = query_transactions(db, start, end)
+    bill_keys = active_bill_merchant_keys(db) if discretionary else set()
+    matched: list[Transaction] = []
+    display_name = target
+    total_discretionary = Decimal("0.00")
+    total_outflows = Decimal("0.00")
+
+    for tx in txs:
+        amount = tx.amount or Decimal("0.00")
+        if amount >= 0:
+            continue
+        abs_amount = abs(amount)
+        total_outflows += abs_amount
+        if not (discretionary and is_non_discretionary(tx, bill_keys)):
+            total_discretionary += abs_amount
+
+        cat = _category_label(tx.category)
+        if cat != target:
+            continue
+
+        # When drilling into a category, include that category's own outflows even if
+        # it is Bills/Savings/Transfers; still drop Upcoming Bill merchants elsewhere.
+        if discretionary and not target_is_fixed and is_non_discretionary(tx, bill_keys):
+            continue
+
+        matched.append(tx)
+        if tx.category:
+            display_name = tx.category
+
+    return display_name, matched, total_discretionary, total_outflows
+
+
+def category_detail(
+    db: Session,
+    name: str,
+    start: date,
+    end: date,
+    *,
+    discretionary: bool = True,
+    top_n: int = 10,
+    compare_previous: bool = False,
+) -> dict | None:
+    """Deep dive one Monzo category: merchants, monthly series, largest txs, optional prior pay period."""
+    top_n = _clamp_top_n(top_n)
+    target = name.strip() or "Uncategorised"
+    target_is_fixed = _normalize_category(target) in NON_DISCRETIONARY_CATEGORIES
+    display_name, matched, total_discretionary, total_outflows = _category_outflows(
+        db, name, start, end, discretionary=discretionary
+    )
+    if not matched:
+        return None
+
+    total = sum((abs(t.amount or Decimal("0.00")) for t in matched), Decimal("0.00"))
+    count = len(matched)
+    avg = (total / Decimal(count)).quantize(Decimal("0.01"))
+    dates = sorted(t.date for t in matched)
+
+    merch: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+    by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+    for tx in matched:
+        merch[tx.merchant or "Unknown"] += abs(tx.amount or Decimal("0.00"))
+        by_month[tx.date.strftime("%Y-%m")] += abs(tx.amount or Decimal("0.00"))
+
+    by_merchant = [
+        NamedTotal(name=k, total=v)
+        for k, v in sorted(merch.items(), key=lambda item: item[1], reverse=True)[:top_n]
+    ]
+    largest_txs = sorted(
+        matched,
+        key=lambda t: abs(t.amount or Decimal("0.00")),
+        reverse=True,
+    )[:top_n]
+    largest = [
+        {
+            "date": tx.date,
+            "merchant": tx.merchant or "Unknown",
+            "category": display_name,
+            "amount": abs(tx.amount or Decimal("0.00")),
+        }
+        for tx in largest_txs
+    ]
+
+    share = None
+    denom = total_outflows if target_is_fixed else total_discretionary
+    if denom > 0:
+        share = (total / denom * Decimal("100")).quantize(Decimal("0.1"))
+
+    previous = None
+    if compare_previous:
+        from app.services.income import current_pay_period, previous_pay_date
+
+        current = current_pay_period(db, end)
+        prior_end = current.start - timedelta(days=1)
+        prior_start = previous_pay_date(db, prior_end)
+        _, prev_matched, _, _ = _category_outflows(
+            db, display_name, prior_start, prior_end, discretionary=discretionary
+        )
+        prev_total = sum(
+            (abs(t.amount or Decimal("0.00")) for t in prev_matched),
+            Decimal("0.00"),
+        )
+        delta = total - prev_total
+        delta_pct = None
+        if prev_total > 0:
+            delta_pct = (delta / prev_total * Decimal("100")).quantize(Decimal("0.1"))
+        previous = {
+            "start": prior_start,
+            "end": prior_end,
+            "total": prev_total,
+            "count": len(prev_matched),
+            "delta": delta,
+            "delta_pct": delta_pct,
+        }
+
+    return {
+        "name": display_name,
+        "query": name,
+        "start": start,
+        "end": end,
+        "discretionary": discretionary,
+        "total": total,
+        "count": count,
+        "average": avg,
+        "first_seen": dates[0],
+        "last_seen": dates[-1],
+        "share_of_spent_pct": share,
+        "by_merchant": by_merchant,
+        "by_month": [
+            {"month": k, "total": by_month[k]}
+            for k in sorted(by_month.keys())
+        ],
+        "largest": largest,
+        "previous": previous,
+    }

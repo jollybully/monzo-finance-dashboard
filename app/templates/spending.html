@@ -18,7 +18,7 @@
         <tbody>
           {% for row in mtd.by_category %}
           <tr>
-            <td>{{ row.name }}</td>
+            <td><a href="/categories/{{ row.name | urlquote }}">{{ row.name }}</a></td>
             <td class="num">{{ row.total | money }}</td>
           </tr>
           {% endfor %}
@@ -56,7 +56,7 @@
       {% for b in budgets %}
       <div class="budget-row">
         <div class="budget-row-head">
-          <span class="name">{{ b.category }}{% if b.over %} <span class="hint danger">over</span>{% endif %}</span>
+          <span class="name"><a href="/categories/{{ b.category | urlquote }}">{{ b.category }}</a>{% if b.over %} <span class="hint danger">over</span>{% endif %}</span>
           <span class="figures">{{ b.spent | money }} / {{ b.monthly_limit | money }} · {{ b.remaining | money }} left</span>
         </div>
         <div class="progress{% if b.over %} over{% endif %}">

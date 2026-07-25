@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}{{ category_name }}{% endblock %}
+{% block content %}
+  <p class="hint"><a href="/spending">← Spending</a></p>
+  <h1>{{ category_name }}</h1>
+  <p class="lede">
+    Pay period {{ period.start | shortdate }} → {{ period.next_payday | shortdate }}
+    (through {{ period.today | shortdate }}).
+    Merchants and totals for this category{% if detail and detail.discretionary %}; discretionary filter applied{% endif %}.
+  </p>
+
+  {% if detail %}
+  <div class="panel">
+    <h2>This period</h2>
+    <table>
+      <tbody>
+        <tr>
+          <td>Spent</td>
+          <td class="num">{{ detail.total | money }}</td>
+        </tr>
+        <tr>
+          <td>Transactions</td>
+          <td class="num">{{ detail.count }}</td>
+        </tr>
+        <tr>
+          <td>Average</td>
+          <td class="num">{{ detail.average | money }}</td>
+        </tr>
+        <tr>
+          <td>Share of spend</td>
+          <td class="num">{% if detail.share_of_spent_pct is not none %}{{ detail.share_of_spent_pct }}%{% else %}—{% endif %}</td>
+        </tr>
+      </tbody>
+    </table>
+    {% if detail.previous %}
+    <p class="hint">
+      Previous period ({{ detail.previous.start | shortdate }} → {{ detail.previous.end | shortdate }}):
+      {{ detail.previous.total | money }}
+      {% if detail.previous.delta_pct is not none %}
+        ·
+        {% if detail.previous.delta > 0 %}+{% endif %}{{ detail.previous.delta | money }}
+        ({{ detail.previous.delta_pct }}%)
+      {% elif detail.previous.total == 0 and detail.total > 0 %}
+        · new vs last period
+      {% endif %}
+    </p>
+    {% endif %}
+  </div>
+
+  {% if budget %}
+  <div class="panel">
+    <h2>Budget this month</h2>
+    <div class="budget-list">
+      <div class="budget-row">
+        <div class="budget-row-head">
+          <span class="name">{{ budget.category }}{% if budget.over %} <span class="hint danger">over</span>{% endif %}</span>
+          <span class="figures">{{ budget.spent | money }} / {{ budget.monthly_limit | money }} · {{ budget.remaining | money }} left</span>
+        </div>
+        <div class="progress{% if budget.over %} over{% endif %}">
+          <span style="width: {% if budget.pct > 100 %}100{% else %}{{ budget.pct }}{% endif %}%"></span>
+        </div>
+      </div>
+    </div>
+    <p class="hint"><a href="/budgets">Manage budgets</a></p>
+  </div>
+  {% endif %}
+
+  <div class="two-col">
+    <div class="panel">
+      <h2>Merchants in {{ category_name }}</h2>
+      {% if detail.by_merchant %}
+      <table>
+        <thead><tr><th>Merchant</th><th class="num">Spent</th></tr></thead>
+        <tbody>
+          {% for row in detail.by_merchant %}
+          <tr>
+            <td>{{ row.name }}</td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No merchants this period.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <h2>Monthly trend</h2>
+      {% if by_month %}
+      <table>
+        <thead><tr><th>Month</th><th class="num">Spent</th></tr></thead>
+        <tbody>
+          {% for row in by_month %}
+          <tr>
+            <td>{{ row.month }}</td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p class="hint">Last ~6 months.</p>
+      {% else %}
+      <p class="hint">No history in the last 6 months.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Largest transactions</h2>
+    {% if detail.largest %}
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Merchant</th>
+          <th class="num">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in detail.largest %}
+        <tr>
+          <td>{{ tx.date | shortdate }}</td>
+          <td>{{ tx.merchant }}</td>
+          <td class="num">{{ tx.amount | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No transactions this period.</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="panel">
+    <p class="hint">No spending in {{ category_name }} for this pay period.</p>
+    {% if by_month %}
+    <h2>Monthly trend</h2>
+    <table>
+      <thead><tr><th>Month</th><th class="num">Spent</th></tr></thead>
+      <tbody>
+        {% for row in by_month %}
+        <tr>
+          <td>{{ row.month }}</td>
+          <td class="num">{{ row.total | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="hint">Last ~6 months (no spend in the current pay period).</p>
+    {% endif %}
+  </div>
+  {% endif %}
+{% endblock %}

@@ -36,7 +36,7 @@
       {% for b in progress %}
       <div class="budget-row">
         <div class="budget-row-head">
-          <span class="name">{{ b.category }}{% if b.over %} <span class="hint danger">over</span>{% endif %}</span>
+          <span class="name"><a href="/categories/{{ b.category | urlquote }}">{{ b.category }}</a>{% if b.over %} <span class="hint danger">over</span>{% endif %}</span>
           <span class="figures">{{ b.spent | money }} / {{ b.monthly_limit | money }} · {{ b.pct }}%</span>
         </div>
         <div class="progress{% if b.over %} over{% endif %}">

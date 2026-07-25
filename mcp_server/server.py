@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal
 from app.services.analytics import (
     category_breakdown,
+    category_detail,
     compare_pay_periods as compare_pay_periods_svc,
     data_range,
     day_stats,
@@ -41,7 +42,7 @@ Rules:
 - Forecast is income + bills only (not everyday discretionary spend).
 - This is not mortgage or regulated financial advice.
 - Prefer get_spending_snapshot or compare_pay_periods for top-level questions,
-  then drill with merchant/category tools.
+  then drill with get_category_detail / get_merchant_detail.
 """.strip()
 
 mcp = FastMCP(
@@ -271,6 +272,44 @@ def get_category_breakdown(
             compare_previous=compare_previous,
         )
         return to_jsonable(result)
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_category_detail(
+    name: str,
+    start: str | None = None,
+    end: str | None = None,
+    discretionary: bool = True,
+    top_n: int = 10,
+    compare_previous: bool = False,
+) -> dict[str, Any]:
+    """Deep dive one Monzo category: merchants within it, monthly series, largest txs, share of spend, averages. Omit dates to use full history in the DB. Set compare_previous for vs prior pay period."""
+    db = _db()
+    try:
+        span = data_range(db)
+        default_start = span["earliest"] or date.today()
+        default_end = span["latest"] or date.today()
+        start_d = _parse_date(start, default=default_start)  # type: ignore[arg-type]
+        end_d = _parse_date(end, default=default_end)  # type: ignore[arg-type]
+        detail = category_detail(
+            db,
+            name,
+            start_d,
+            end_d,
+            discretionary=discretionary,
+            top_n=top_n,
+            compare_previous=compare_previous,
+        )
+        if not detail:
+            return {
+                "found": False,
+                "name": name,
+                "start": start_d.isoformat(),
+                "end": end_d.isoformat(),
+            }
+        return {"found": True, **to_jsonable(detail)}
     finally:
         db.close()
 

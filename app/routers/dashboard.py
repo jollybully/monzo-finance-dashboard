@@ -1,6 +1,6 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import ReportRun
 from app.services.analytics import (
+    NON_DISCRETIONARY_CATEGORIES,
+    category_detail,
     pay_period_to_date_stats,
     previous_pay_period_stats,
     savings_rate,
@@ -108,9 +110,14 @@ def _shortdatetime(value: datetime | date | str | None) -> str:
         return text
 
 
+def _urlquote(value: str | None) -> str:
+    return quote(str(value or ""), safe="")
+
+
 templates.env.filters["money"] = _money
 templates.env.filters["shortdate"] = _shortdate
 templates.env.filters["shortdatetime"] = _shortdatetime
+templates.env.filters["urlquote"] = _urlquote
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -189,6 +196,51 @@ def spending(request: Request, db: Session = Depends(get_db)):
             "mtd": mtd,
             "prev": prev,
             "budgets": budgets,
+        },
+    )
+
+
+@router.get("/categories/{name}", response_class=HTMLResponse)
+def category_page(request: Request, name: str, db: Session = Depends(get_db)):
+    today = date.today()
+    category_name = unquote(name).strip() or "Uncategorised"
+    period = current_pay_period(db, today)
+    # Fixed Monzo categories are excluded from discretionary rankings; still show them here.
+    cat_key = category_name.strip().lower().replace("_", " ")
+    discretionary = cat_key not in NON_DISCRETIONARY_CATEGORIES
+    detail = category_detail(
+        db,
+        category_name,
+        period.start,
+        today,
+        discretionary=discretionary,
+        top_n=10,
+        compare_previous=True,
+    )
+    trend_start = today - timedelta(days=183)
+    trend = category_detail(
+        db,
+        category_name,
+        trend_start,
+        today,
+        discretionary=discretionary,
+        top_n=1,
+        compare_previous=False,
+    )
+    budget = next(
+        (b for b in budget_progress(db, today) if b.category == category_name),
+        None,
+    )
+    return templates.TemplateResponse(
+        request,
+        "category_detail.html",
+        {
+            "active": "spending",
+            "period": period,
+            "category_name": category_name,
+            "detail": detail,
+            "by_month": trend["by_month"] if trend else [],
+            "budget": budget,
         },
     )
 

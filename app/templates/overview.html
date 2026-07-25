@@ -162,7 +162,7 @@
       <tbody>
         {% for row in mtd.by_category %}
         <tr>
-          <td>{{ row.name }}</td>
+          <td><a href="/categories/{{ row.name | urlquote }}">{{ row.name }}</a></td>
           <td class="num">{{ row.total | money }}</td>
         </tr>
         {% endfor %}
