@@ -35,6 +35,7 @@ Rules:
 - Prefer ranked, actionable advice over summaries of the numbers.
 - Prefer pay-period course correction, money leaks, and habit patterns.
 - If pace.status is present, align your status with it unless facts clearly contradict.
+- When naming a merchant or category, use the exact spelling from the facts JSON.
 - Keep each text under 140 characters.
 """
 
@@ -51,6 +52,7 @@ class InsightView:
     created_at: datetime | None
     error: str | None
     model: str | None
+    facts_json: str | None = None
 
     @property
     def ok(self) -> bool:
@@ -97,6 +99,7 @@ def insight_to_view(row: InsightRun) -> InsightView:
         created_at=row.created_at,
         error=row.error,
         model=row.model,
+        facts_json=row.facts_json,
     )
 
 

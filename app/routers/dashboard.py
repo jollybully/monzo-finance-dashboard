@@ -50,6 +50,7 @@ from app.services.recurring import (
 from app.services.reports import generate_and_send_report
 from app.services.safe_spend import calculate_safe_spend
 from app.services.sheets_sync import sync_transactions
+from app.services.insight_links import build_insight_html, collect_link_entities
 from app.services.insights import (
     generate_insight,
     get_latest_insight,
@@ -130,6 +131,16 @@ def overview(request: Request, db: Session = Depends(get_db)):
     income = monthly_income_total(db)
     rate = savings_rate(income, stats.spent)
     insight = get_latest_insight(db, ok_only=True) if insights_configured() else None
+    insight_html = None
+    if insight and insight.ok:
+        entities = collect_link_entities(db, insight.facts_json)
+        insight_html = build_insight_html(
+            headline=insight.headline,
+            actions=insight.actions,
+            leaks=insight.leaks,
+            habits=insight.habits,
+            entities=entities,
+        )
     return templates.TemplateResponse(
         request,
         "overview.html",
@@ -143,6 +154,7 @@ def overview(request: Request, db: Session = Depends(get_db)):
             "savings_rate": rate,
             "insights_enabled": insights_configured(),
             "insight": insight,
+            "insight_html": insight_html,
             "sync_message": request.query_params.get("sync"),
             "sync_error": request.query_params.get("error"),
             "insight_error": request.query_params.get("insight_error"),
