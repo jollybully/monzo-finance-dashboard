@@ -12,6 +12,7 @@ from app.models import ReportRun
 from app.services.analytics import (
     NON_DISCRETIONARY_CATEGORIES,
     category_detail,
+    merchant_detail,
     pay_period_to_date_stats,
     previous_pay_period_stats,
     savings_rate,
@@ -216,16 +217,7 @@ def category_page(request: Request, name: str, db: Session = Depends(get_db)):
         discretionary=discretionary,
         top_n=10,
         compare_previous=True,
-    )
-    trend_start = today - timedelta(days=183)
-    trend = category_detail(
-        db,
-        category_name,
-        trend_start,
-        today,
-        discretionary=discretionary,
-        top_n=1,
-        compare_previous=False,
+        series_start=today - timedelta(days=183),
     )
     budget = next(
         (b for b in budget_progress(db, today) if b.category == category_name),
@@ -239,8 +231,34 @@ def category_page(request: Request, name: str, db: Session = Depends(get_db)):
             "period": period,
             "category_name": category_name,
             "detail": detail,
-            "by_month": trend["by_month"] if trend else [],
             "budget": budget,
+        },
+    )
+
+
+@router.get("/merchants/{name}", response_class=HTMLResponse)
+def merchant_page(request: Request, name: str, db: Session = Depends(get_db)):
+    today = date.today()
+    merchant_name = unquote(name).strip() or "Unknown"
+    period = current_pay_period(db, today)
+    detail = merchant_detail(
+        db,
+        merchant_name,
+        period.start,
+        today,
+        discretionary=True,
+        top_n=10,
+        compare_previous=True,
+        series_start=today - timedelta(days=183),
+    )
+    return templates.TemplateResponse(
+        request,
+        "merchant_detail.html",
+        {
+            "active": "spending",
+            "period": period,
+            "merchant_name": merchant_name,
+            "detail": detail,
         },
     )
 

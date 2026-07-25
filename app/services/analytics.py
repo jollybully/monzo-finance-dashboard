@@ -180,6 +180,14 @@ def _clamp_top_n(top_n: int, *, default: int = 10, hard_max: int = 25) -> int:
     return max(1, min(n, hard_max))
 
 
+def _pace(total: Decimal, start: date, end: date) -> tuple[Decimal, Decimal]:
+    """Avg daily spend and 28-day normalised pace for a date span."""
+    days = max((end - start).days + 1, 1)
+    avg_daily = (total / Decimal(days)).quantize(Decimal("0.01"))
+    normalised_28d = (avg_daily * Decimal("28")).quantize(Decimal("0.01"))
+    return avg_daily, normalised_28d
+
+
 def data_range(db: Session) -> dict[str, date | int | None]:
     row = db.query(
         func.min(Transaction.date),
@@ -374,17 +382,85 @@ def search_merchants(
     return rows
 
 
-def merchant_detail(
+def _category_label(category: str | None) -> str:
+    return category or "Uncategorised"
+
+
+def _previous_pay_bounds(db: Session, end: date) -> tuple[date, date]:
+    from app.services.income import current_pay_period, previous_pay_date
+
+    current = current_pay_period(db, end)
+    prior_end = current.start - timedelta(days=1)
+    prior_start = previous_pay_date(db, prior_end)
+    return prior_start, prior_end
+
+
+def _previous_block(
+    *,
+    total: Decimal,
+    prev_total: Decimal,
+    prev_count: int,
+    prior_start: date,
+    prior_end: date,
+) -> dict:
+    delta = total - prev_total
+    delta_pct = None
+    if prev_total > 0:
+        delta_pct = (delta / prev_total * Decimal("100")).quantize(Decimal("0.1"))
+    prev_avg, prev_norm = _pace(prev_total, prior_start, prior_end)
+    return {
+        "start": prior_start,
+        "end": prior_end,
+        "total": prev_total,
+        "count": prev_count,
+        "delta": delta,
+        "delta_pct": delta_pct,
+        "avg_daily": prev_avg,
+        "normalised_28d": prev_norm,
+    }
+
+
+def _largest_rows(
+    matched: list[Transaction],
+    *,
+    top_n: int,
+    default_category: str | None = None,
+) -> list[dict]:
+    largest_txs = sorted(
+        matched,
+        key=lambda t: abs(t.amount or Decimal("0.00")),
+        reverse=True,
+    )[:top_n]
+    return [
+        {
+            "date": tx.date,
+            "merchant": tx.merchant or "Unknown",
+            "category": tx.category or default_category or "Uncategorised",
+            "amount": abs(tx.amount or Decimal("0.00")),
+        }
+        for tx in largest_txs
+    ]
+
+
+def _by_month_rows(matched: list[Transaction]) -> list[dict]:
+    by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+    for tx in matched:
+        by_month[tx.date.strftime("%Y-%m")] += abs(tx.amount or Decimal("0.00"))
+    return [{"month": k, "total": by_month[k]} for k in sorted(by_month.keys())]
+
+
+def _merchant_outflows(
     db: Session,
     name: str,
     start: date,
     end: date,
     *,
     discretionary: bool = True,
-) -> dict | None:
+) -> tuple[str, list[Transaction], Decimal]:
+    """Match merchant outflows; return display name, matched txs, discretionary spend total."""
     needle = normalize_merchant(name)
     if not needle:
-        return None
+        return name, [], Decimal("0.00")
 
     txs = query_transactions(db, start, end)
     bill_keys = active_bill_merchant_keys(db) if discretionary else set()
@@ -406,21 +482,91 @@ def merchant_detail(
             if tx.merchant:
                 display_name = tx.merchant
 
-    if not matched:
+    return display_name, matched, total_discretionary
+
+
+def merchant_detail(
+    db: Session,
+    name: str,
+    start: date,
+    end: date,
+    *,
+    discretionary: bool = True,
+    top_n: int = 10,
+    compare_previous: bool = False,
+    series_start: date | None = None,
+) -> dict | None:
+    """Deep dive one merchant: categories, monthly series, largest txs, pace, optional prior pay period."""
+    needle = normalize_merchant(name)
+    if not needle:
         return None
 
-    total = sum((abs(t.amount or Decimal("0.00")) for t in matched), Decimal("0.00"))
-    count = len(matched)
-    avg = (total / Decimal(count)).quantize(Decimal("0.01"))
-    dates = sorted(t.date for t in matched)
-    by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
-    for tx in matched:
-        key = tx.date.strftime("%Y-%m")
-        by_month[key] += abs(tx.amount or Decimal("0.00"))
+    top_n = _clamp_top_n(top_n)
+    window_start = (
+        series_start if series_start is not None and series_start < start else start
+    )
+    if window_start < start:
+        display_name, window_matched, _ = _merchant_outflows(
+            db, name, window_start, end, discretionary=discretionary
+        )
+        period_matched = [tx for tx in window_matched if tx.date >= start]
+        _, _, total_discretionary = _merchant_outflows(
+            db, name, start, end, discretionary=discretionary
+        )
+    else:
+        display_name, period_matched, total_discretionary = _merchant_outflows(
+            db, name, start, end, discretionary=discretionary
+        )
+        window_matched = period_matched
+
+    if not period_matched and not window_matched:
+        return None
+
+    total = sum(
+        (abs(t.amount or Decimal("0.00")) for t in period_matched), Decimal("0.00")
+    )
+    count = len(period_matched)
+    avg = (
+        (total / Decimal(count)).quantize(Decimal("0.01"))
+        if count
+        else Decimal("0.00")
+    )
+    dates = sorted(t.date for t in period_matched) if period_matched else []
+    avg_daily, normalised_28d = _pace(total, start, end)
+
+    cats: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
+    for tx in period_matched:
+        cats[_category_label(tx.category)] += abs(tx.amount or Decimal("0.00"))
+    by_category = [
+        NamedTotal(name=k, total=v)
+        for k, v in sorted(cats.items(), key=lambda item: item[1], reverse=True)[:top_n]
+    ]
 
     share = None
-    if total_discretionary > 0:
+    if total_discretionary > 0 and total > 0:
         share = (total / total_discretionary * Decimal("100")).quantize(Decimal("0.1"))
+
+    previous = None
+    if compare_previous:
+        prior_start, prior_end = _previous_pay_bounds(db, end)
+        _, prev_matched, _ = _merchant_outflows(
+            db, display_name, prior_start, prior_end, discretionary=discretionary
+        )
+        prev_total = sum(
+            (abs(t.amount or Decimal("0.00")) for t in prev_matched),
+            Decimal("0.00"),
+        )
+        previous = _previous_block(
+            total=total,
+            prev_total=prev_total,
+            prev_count=len(prev_matched),
+            prior_start=prior_start,
+            prior_end=prior_end,
+        )
+
+    series_for_month = window_matched if window_start < start else period_matched
+    first_seen = dates[0] if dates else (sorted(t.date for t in window_matched)[0] if window_matched else None)
+    last_seen = dates[-1] if dates else (sorted(t.date for t in window_matched)[-1] if window_matched else None)
 
     return {
         "name": display_name,
@@ -431,18 +577,17 @@ def merchant_detail(
         "total": total,
         "count": count,
         "average": avg,
-        "first_seen": dates[0],
-        "last_seen": dates[-1],
+        "avg_daily": avg_daily,
+        "normalised_28d": normalised_28d,
+        "first_seen": first_seen,
+        "last_seen": last_seen,
         "share_of_spent_pct": share,
-        "by_month": [
-            {"month": k, "total": by_month[k]}
-            for k in sorted(by_month.keys())
-        ],
+        "by_category": by_category,
+        "by_month": _by_month_rows(series_for_month),
+        "largest": _largest_rows(period_matched, top_n=top_n),
+        "previous": previous,
+        "has_period_spend": bool(period_matched),
     }
-
-
-def _category_label(category: str | None) -> str:
-    return category or "Uncategorised"
 
 
 def _category_outflows(
@@ -501,59 +646,60 @@ def category_detail(
     discretionary: bool = True,
     top_n: int = 10,
     compare_previous: bool = False,
+    series_start: date | None = None,
 ) -> dict | None:
-    """Deep dive one Monzo category: merchants, monthly series, largest txs, optional prior pay period."""
+    """Deep dive one Monzo category: merchants, monthly series, largest txs, pace, optional prior pay period."""
     top_n = _clamp_top_n(top_n)
     target = name.strip() or "Uncategorised"
     target_is_fixed = _normalize_category(target) in NON_DISCRETIONARY_CATEGORIES
-    display_name, matched, total_discretionary, total_outflows = _category_outflows(
-        db, name, start, end, discretionary=discretionary
+    window_start = (
+        series_start if series_start is not None and series_start < start else start
     )
-    if not matched:
+    if window_start < start:
+        display_name, window_matched, _, _ = _category_outflows(
+            db, name, window_start, end, discretionary=discretionary
+        )
+        period_matched = [tx for tx in window_matched if tx.date >= start]
+        _, _, total_discretionary, total_outflows = _category_outflows(
+            db, name, start, end, discretionary=discretionary
+        )
+    else:
+        display_name, period_matched, total_discretionary, total_outflows = (
+            _category_outflows(db, name, start, end, discretionary=discretionary)
+        )
+        window_matched = period_matched
+
+    if not period_matched and not window_matched:
         return None
 
-    total = sum((abs(t.amount or Decimal("0.00")) for t in matched), Decimal("0.00"))
-    count = len(matched)
-    avg = (total / Decimal(count)).quantize(Decimal("0.01"))
-    dates = sorted(t.date for t in matched)
+    total = sum(
+        (abs(t.amount or Decimal("0.00")) for t in period_matched), Decimal("0.00")
+    )
+    count = len(period_matched)
+    avg = (
+        (total / Decimal(count)).quantize(Decimal("0.01"))
+        if count
+        else Decimal("0.00")
+    )
+    dates = sorted(t.date for t in period_matched) if period_matched else []
+    avg_daily, normalised_28d = _pace(total, start, end)
 
     merch: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
-    by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
-    for tx in matched:
+    for tx in period_matched:
         merch[tx.merchant or "Unknown"] += abs(tx.amount or Decimal("0.00"))
-        by_month[tx.date.strftime("%Y-%m")] += abs(tx.amount or Decimal("0.00"))
-
     by_merchant = [
         NamedTotal(name=k, total=v)
         for k, v in sorted(merch.items(), key=lambda item: item[1], reverse=True)[:top_n]
     ]
-    largest_txs = sorted(
-        matched,
-        key=lambda t: abs(t.amount or Decimal("0.00")),
-        reverse=True,
-    )[:top_n]
-    largest = [
-        {
-            "date": tx.date,
-            "merchant": tx.merchant or "Unknown",
-            "category": display_name,
-            "amount": abs(tx.amount or Decimal("0.00")),
-        }
-        for tx in largest_txs
-    ]
 
     share = None
     denom = total_outflows if target_is_fixed else total_discretionary
-    if denom > 0:
+    if denom > 0 and total > 0:
         share = (total / denom * Decimal("100")).quantize(Decimal("0.1"))
 
     previous = None
     if compare_previous:
-        from app.services.income import current_pay_period, previous_pay_date
-
-        current = current_pay_period(db, end)
-        prior_end = current.start - timedelta(days=1)
-        prior_start = previous_pay_date(db, prior_end)
+        prior_start, prior_end = _previous_pay_bounds(db, end)
         _, prev_matched, _, _ = _category_outflows(
             db, display_name, prior_start, prior_end, discretionary=discretionary
         )
@@ -561,18 +707,17 @@ def category_detail(
             (abs(t.amount or Decimal("0.00")) for t in prev_matched),
             Decimal("0.00"),
         )
-        delta = total - prev_total
-        delta_pct = None
-        if prev_total > 0:
-            delta_pct = (delta / prev_total * Decimal("100")).quantize(Decimal("0.1"))
-        previous = {
-            "start": prior_start,
-            "end": prior_end,
-            "total": prev_total,
-            "count": len(prev_matched),
-            "delta": delta,
-            "delta_pct": delta_pct,
-        }
+        previous = _previous_block(
+            total=total,
+            prev_total=prev_total,
+            prev_count=len(prev_matched),
+            prior_start=prior_start,
+            prior_end=prior_end,
+        )
+
+    series_for_month = window_matched if window_start < start else period_matched
+    first_seen = dates[0] if dates else (sorted(t.date for t in window_matched)[0] if window_matched else None)
+    last_seen = dates[-1] if dates else (sorted(t.date for t in window_matched)[-1] if window_matched else None)
 
     return {
         "name": display_name,
@@ -583,14 +728,16 @@ def category_detail(
         "total": total,
         "count": count,
         "average": avg,
-        "first_seen": dates[0],
-        "last_seen": dates[-1],
+        "avg_daily": avg_daily,
+        "normalised_28d": normalised_28d,
+        "first_seen": first_seen,
+        "last_seen": last_seen,
         "share_of_spent_pct": share,
         "by_merchant": by_merchant,
-        "by_month": [
-            {"month": k, "total": by_month[k]}
-            for k in sorted(by_month.keys())
-        ],
-        "largest": largest,
+        "by_month": _by_month_rows(series_for_month),
+        "largest": _largest_rows(
+            period_matched, top_n=top_n, default_category=display_name
+        ),
         "previous": previous,
+        "has_period_spend": bool(period_matched),
     }

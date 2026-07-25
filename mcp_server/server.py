@@ -225,8 +225,10 @@ def get_merchant_detail(
     start: str | None = None,
     end: str | None = None,
     discretionary: bool = True,
+    top_n: int = 10,
+    compare_previous: bool = False,
 ) -> dict[str, Any]:
-    """Deep dive one merchant: total, count, average, first/last seen, monthly series, share of spend. Omit dates to use full history in the DB."""
+    """Deep dive one merchant: total, count, average, avg_daily, normalised_28d pace, categories, monthly series, largest txs, share of spend. Omit dates to use full history in the DB. Set compare_previous for vs prior pay period (includes previous pace)."""
     db = _db()
     try:
         span = data_range(db)
@@ -235,7 +237,13 @@ def get_merchant_detail(
         start_d = _parse_date(start, default=default_start)  # type: ignore[arg-type]
         end_d = _parse_date(end, default=default_end)  # type: ignore[arg-type]
         detail = merchant_detail(
-            db, name, start_d, end_d, discretionary=discretionary
+            db,
+            name,
+            start_d,
+            end_d,
+            discretionary=discretionary,
+            top_n=top_n,
+            compare_previous=compare_previous,
         )
         if not detail:
             return {
@@ -285,7 +293,7 @@ def get_category_detail(
     top_n: int = 10,
     compare_previous: bool = False,
 ) -> dict[str, Any]:
-    """Deep dive one Monzo category: merchants within it, monthly series, largest txs, share of spend, averages. Omit dates to use full history in the DB. Set compare_previous for vs prior pay period."""
+    """Deep dive one Monzo category: merchants within it, monthly series, largest txs, share of spend, averages, avg_daily and normalised_28d pace. Omit dates to use full history in the DB. Set compare_previous for vs prior pay period (includes previous pace)."""
     db = _db()
     try:
         span = data_range(db)

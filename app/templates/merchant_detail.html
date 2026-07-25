@@ -1,13 +1,12 @@
 {% extends "base.html" %}
-{% block title %}{{ category_name }}{% endblock %}
+{% block title %}{{ detail.name if detail else merchant_name }}{% endblock %}
 {% block content %}
   <p class="hint"><a href="/spending">← Spending</a></p>
-  <h1>{{ category_name }}</h1>
+  <h1>{{ detail.name if detail else merchant_name }}</h1>
   <p class="lede">
     Pay period {{ period.start | shortdate }} → {{ period.next_payday | shortdate }}
     (through {{ period.today | shortdate }}).
-    Merchants and totals for this category{% if detail and detail.discretionary %}; discretionary filter applied{% endif %}.
-    Budget progress below is calendar month, not pay period.
+    Spend here excludes configured bills plus Monzo Bills, Savings, and Transfers.
   </p>
 
   {% if detail and detail.has_period_spend %}
@@ -39,6 +38,12 @@
           <td>Share of spend</td>
           <td class="num">{% if detail.share_of_spent_pct is not none %}{{ detail.share_of_spent_pct }}%{% else %}—{% endif %}</td>
         </tr>
+        {% if detail.first_seen and detail.last_seen %}
+        <tr>
+          <td>First / last this period</td>
+          <td class="num">{{ detail.first_seen | shortdate }} → {{ detail.last_seen | shortdate }}</td>
+        </tr>
+        {% endif %}
       </tbody>
     </table>
     {% if detail.previous %}
@@ -58,41 +63,23 @@
     {% endif %}
   </div>
 
-  {% if budget %}
-  <div class="panel">
-    <h2>Budget this month (calendar)</h2>
-    <div class="budget-list">
-      <div class="budget-row">
-        <div class="budget-row-head">
-          <span class="name">{{ budget.category }}{% if budget.over %} <span class="hint danger">over</span>{% endif %}</span>
-          <span class="figures">{{ budget.spent | money }} / {{ budget.monthly_limit | money }} · {{ budget.remaining | money }} left</span>
-        </div>
-        <div class="progress{% if budget.over %} over{% endif %}">
-          <span style="width: {% if budget.pct > 100 %}100{% else %}{{ budget.pct }}{% endif %}%"></span>
-        </div>
-      </div>
-    </div>
-    <p class="hint"><a href="/budgets">Manage budgets</a></p>
-  </div>
-  {% endif %}
-
   <div class="two-col">
     <div class="panel">
-      <h2>Merchants in {{ category_name }}</h2>
-      {% if detail.by_merchant %}
+      <h2>Categories</h2>
+      {% if detail.by_category %}
       <table>
-        <thead><tr><th>Merchant</th><th class="num">Spent</th></tr></thead>
+        <thead><tr><th>Category</th><th class="num">Spent</th></tr></thead>
         <tbody>
-          {% for row in detail.by_merchant %}
+          {% for row in detail.by_category %}
           <tr>
-            <td><a href="/merchants/{{ row.name | urlquote }}">{{ row.name }}</a></td>
+            <td><a href="/categories/{{ row.name | urlquote }}">{{ row.name }}</a></td>
             <td class="num">{{ row.total | money }}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
       {% else %}
-      <p class="hint">No merchants this period.</p>
+      <p class="hint">No categories this period.</p>
       {% endif %}
     </div>
 
@@ -124,7 +111,7 @@
       <thead>
         <tr>
           <th>Date</th>
-          <th>Merchant</th>
+          <th>Category</th>
           <th class="num">Amount</th>
         </tr>
       </thead>
@@ -132,7 +119,7 @@
         {% for tx in detail.largest %}
         <tr>
           <td>{{ tx.date | shortdate }}</td>
-          <td><a href="/merchants/{{ tx.merchant | urlquote }}">{{ tx.merchant }}</a></td>
+          <td><a href="/categories/{{ tx.category | urlquote }}">{{ tx.category }}</a></td>
           <td class="num">{{ tx.amount | money }}</td>
         </tr>
         {% endfor %}
@@ -144,7 +131,7 @@
   </div>
   {% elif detail %}
   <div class="panel">
-    <p class="hint">No spending in {{ category_name }} for this pay period.</p>
+    <p class="hint">No spending at {{ detail.name }} for this pay period.</p>
     {% if detail.previous %}
     <p class="hint">
       Previous period: {{ detail.previous.total | money }}
@@ -170,7 +157,7 @@
   </div>
   {% else %}
   <div class="panel">
-    <p class="hint">No spending in {{ category_name }} for this pay period or the last 6 months.</p>
+    <p class="hint">No spending at {{ merchant_name }} for this pay period or the last 6 months.</p>
   </div>
   {% endif %}
 {% endblock %}

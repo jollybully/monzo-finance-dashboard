@@ -37,7 +37,7 @@
         <tbody>
           {% for row in mtd.by_merchant %}
           <tr>
-            <td>{{ row.name }}</td>
+            <td><a href="/merchants/{{ row.name | urlquote }}">{{ row.name }}</a></td>
             <td class="num">{{ row.total | money }}</td>
           </tr>
           {% endfor %}
@@ -116,8 +116,8 @@
         {% for tx in mtd.largest %}
         <tr>
           <td>{{ tx.date | shortdate }}</td>
-          <td>{{ tx.merchant or '—' }}</td>
-          <td>{{ tx.category or '—' }}</td>
+          <td>{% if tx.merchant %}<a href="/merchants/{{ tx.merchant | urlquote }}">{{ tx.merchant }}</a>{% else %}—{% endif %}</td>
+          <td>{% if tx.category %}<a href="/categories/{{ tx.category | urlquote }}">{{ tx.category }}</a>{% else %}—{% endif %}</td>
           <td class="num">{{ tx.amount | money }}</td>
         </tr>
         {% endfor %}
