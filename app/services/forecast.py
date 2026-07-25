@@ -24,9 +24,9 @@ def _next_monthly(due: date, due_day: int | None) -> date:
 @dataclass
 class ForecastEvent:
     date: date
-    kind: str  # income | bill
+    kind: str  # income | bill | daily
     name: str
-    amount: Decimal  # signed: income +, bill -
+    amount: Decimal  # signed: income +, bill/daily -
 
 
 @dataclass
@@ -43,6 +43,8 @@ class ForecastResult:
     next_payday: date
     events: list[ForecastEvent]
     timeline: list[ForecastPoint]
+    include_daily_spend: bool = False
+    daily_spend: Decimal | None = None
 
 
 def build_forecast(
@@ -50,6 +52,8 @@ def build_forecast(
     *,
     today: date | None = None,
     days: int = 30,
+    include_daily_spend: bool = False,
+    daily_spend: Decimal | None = None,
 ) -> ForecastResult:
     today = today or date.today()
     end = today + timedelta(days=days)
@@ -90,19 +94,43 @@ def build_forecast(
 
     events.sort(key=lambda e: (e.date, 0 if e.kind == "income" else 1, e.name))
 
-    running = balance
-    timeline: list[ForecastPoint] = [
-        ForecastPoint(date=today, balance=running, events=[])
-    ]
+    burn = None
+    if include_daily_spend and daily_spend is not None and daily_spend > 0:
+        burn = daily_spend.quantize(Decimal("0.01"))
+
     by_day: dict[date, list[ForecastEvent]] = {}
     for ev in events:
         by_day.setdefault(ev.date, []).append(ev)
 
-    for d in sorted(by_day):
-        day_events = by_day[d]
-        for ev in day_events:
-            running += ev.amount
-        timeline.append(ForecastPoint(date=d, balance=running, events=day_events))
+    running = balance
+    timeline: list[ForecastPoint] = [
+        ForecastPoint(date=today, balance=running, events=[])
+    ]
+
+    if burn is not None:
+        # Balance already reflects spend through today; burn from tomorrow.
+        day = today + timedelta(days=1)
+        while day <= end:
+            day_events = list(by_day.get(day, []))
+            day_events.insert(
+                0,
+                ForecastEvent(
+                    date=day,
+                    kind="daily",
+                    name="Everyday spend (pace)",
+                    amount=-burn,
+                ),
+            )
+            for ev in day_events:
+                running += ev.amount
+            timeline.append(ForecastPoint(date=day, balance=running, events=day_events))
+            day += timedelta(days=1)
+    else:
+        for d in sorted(by_day):
+            day_events = by_day[d]
+            for ev in day_events:
+                running += ev.amount
+            timeline.append(ForecastPoint(date=d, balance=running, events=day_events))
 
     return ForecastResult(
         start_balance=balance,
@@ -110,4 +138,6 @@ def build_forecast(
         next_payday=payday,
         events=events,
         timeline=timeline,
+        include_daily_spend=bool(burn is not None),
+        daily_spend=burn,
     )

@@ -470,6 +470,15 @@ select {
   margin-top: 0.3rem;
 }
 
+.forecast-toggle {
+  margin: -0.35rem 0 1.1rem;
+}
+
+.forecast-toggle strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
 .hint.danger {
   color: var(--danger);
 }

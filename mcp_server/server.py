@@ -369,14 +369,33 @@ def list_upcoming_bills() -> dict[str, Any]:
 
 
 @mcp.tool()
-def get_cashflow_forecast(days: int = 30) -> dict[str, Any]:
-    """Income + bills forecast (not everyday discretionary spend). Default 30 days."""
+def get_cashflow_forecast(
+    days: int = 30,
+    include_daily_spend: bool = False,
+) -> dict[str, Any]:
+    """Income + bills forecast. Set include_daily_spend to also subtract current pay-period avg daily discretionary pace. Default 30 days."""
     db = _db()
     try:
         days = max(1, min(int(days), 90))
-        result = build_forecast(db, days=days)
+        daily = None
+        if include_daily_spend:
+            from app.services.analytics import pay_period_to_date_stats
+            from app.services.income import current_pay_period
+
+            period = current_pay_period(db)
+            stats = pay_period_to_date_stats(db, top_n=1)
+            elapsed = max((period.today - period.start).days + 1, 1)
+            daily = (stats.spent / Decimal(elapsed)).quantize(Decimal("0.01"))
+        result = build_forecast(
+            db,
+            days=days,
+            include_daily_spend=include_daily_spend,
+            daily_spend=daily,
+        )
         return {
             "days": days,
+            "include_daily_spend": result.include_daily_spend,
+            "daily_spend": money(result.daily_spend) if result.daily_spend is not None else None,
             "start_balance": money(result.start_balance),
             "end_balance": money(result.end_balance),
             "next_payday": result.next_payday.isoformat(),
@@ -388,7 +407,7 @@ def get_cashflow_forecast(days: int = 30) -> dict[str, Any]:
                     "events": to_jsonable(p.events),
                 }
                 for p in result.timeline
-                if p.events
+                if p.events or include_daily_spend
             ],
         }
     finally:

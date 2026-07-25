@@ -508,7 +508,23 @@ def bills_dismiss(suggestion_id: int, db: Session = Depends(get_db)):
 
 @router.get("/forecast", response_class=HTMLResponse)
 def forecast_page(request: Request, db: Session = Depends(get_db)):
-    forecast = build_forecast(db, days=30)
+    today = date.today()
+    include_daily = request.query_params.get("daily", "").strip().lower() in {
+        "1",
+        "true",
+        "on",
+        "yes",
+    }
+    period = current_pay_period(db, today)
+    stats = pay_period_to_date_stats(db, today, top_n=1)
+    days_elapsed = max((period.today - period.start).days + 1, 1)
+    avg_daily = (stats.spent / Decimal(days_elapsed)).quantize(Decimal("0.01"))
+    forecast = build_forecast(
+        db,
+        days=30,
+        include_daily_spend=include_daily,
+        daily_spend=avg_daily if include_daily else None,
+    )
     runway_chart = None
     if len(forecast.timeline) > 1:
         labels: list[str] = []
@@ -546,6 +562,8 @@ def forecast_page(request: Request, db: Session = Depends(get_db)):
             "active": "forecast",
             "forecast": forecast,
             "runway_chart": runway_chart,
+            "include_daily": include_daily,
+            "avg_daily": avg_daily,
         },
     )
 

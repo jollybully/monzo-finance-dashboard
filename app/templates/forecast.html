@@ -2,7 +2,27 @@
 {% block title %}Forecast{% endblock %}
 {% block content %}
   <h1>Forecast</h1>
-  <p class="lede">Projected balance over the next 30 days from income rules and upcoming bills. Everyday spending is not projected.</p>
+  <p class="lede">
+    {% if include_daily %}
+    Projected balance over the next 30 days from income, bills, and your current discretionary pace
+    ({{ avg_daily | money }}/day this pay period). Pace is an assumption, not predicted shops.
+    {% else %}
+    Projected balance over the next 30 days from income rules and upcoming bills. Everyday spending is not projected.
+    {% endif %}
+  </p>
+
+  <p class="hint forecast-toggle">
+    View:
+    {% if include_daily %}
+    <a href="/forecast">Income &amp; bills only</a>
+    ·
+    <strong>Include daily pace ({{ avg_daily | money }}/day)</strong>
+    {% else %}
+    <strong>Income &amp; bills only</strong>
+    ·
+    <a href="/forecast?daily=1">Include daily pace ({{ avg_daily | money }}/day)</a>
+    {% endif %}
+  </p>
 
   <div class="metrics">
     <div class="metric">
@@ -17,12 +37,24 @@
       <span class="label">Next payday</span>
       <span class="value compact">{{ forecast.next_payday | shortdate }}</span>
     </div>
+    {% if include_daily %}
+    <div class="metric">
+      <span class="label">Daily pace used</span>
+      <span class="value">{{ avg_daily | money }}</span>
+    </div>
+    {% endif %}
   </div>
 
   {% if runway_chart %}
   <div class="panel chart-panel">
     <h2>Balance runway</h2>
-    <p class="hint">Projected balance from income and bills only — everyday spend is not included. Markers highlight payday and bill days.</p>
+    <p class="hint">
+      {% if include_daily %}
+      Income, bills, and a straight-line daily burn at {{ avg_daily | money }}/day. Markers highlight payday and bill days.
+      {% else %}
+      Projected balance from income and bills only — everyday spend is not included. Markers highlight payday and bill days.
+      {% endif %}
+    </p>
     <div class="chart-frame tall" data-chart="balanceRunway" data-chart-data="runway-chart-data">
       <canvas aria-label="Projected balance runway"></canvas>
     </div>
@@ -60,7 +92,14 @@
       </tbody>
     </table>
     {% else %}
-    <p class="hint">No income or bills scheduled in the next 30 days. Add rules in Settings and bills on Bills.</p>
+    <p class="hint">
+      {% if include_daily %}
+      No days to project.
+      {% else %}
+      No income or bills scheduled in the next 30 days. Add rules in Settings and bills on Bills — or
+      <a href="/forecast?daily=1">include daily pace</a> to see a spend-down runway.
+      {% endif %}
+    </p>
     {% endif %}
   </div>
 {% endblock %}
