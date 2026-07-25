@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Week {{ detail.start | shortdate }}{% endblock %}
+{% block content %}
+  <p class="hint"><a href="/">← Overview</a></p>
+  <h1>
+    {{ detail.start | shortdate }} → {{ detail.end | shortdate }}
+    {% if detail.is_current %}<span class="hint">(current)</span>{% endif %}
+  </h1>
+  <p class="lede">
+    Mon–Sun week · discretionary spend
+    {% if detail.is_current %}(through today){% endif %}.
+  </p>
+
+  <div class="panel">
+    <h2>This week</h2>
+    <table>
+      <tbody>
+        <tr>
+          <td>Spent</td>
+          <td class="num">{{ detail.spent | money }}</td>
+        </tr>
+        <tr>
+          <td>Per day</td>
+          <td class="num">{{ detail.avg_daily | money }}</td>
+        </tr>
+        <tr>
+          <td>Inflows</td>
+          <td class="num">{{ detail.income | money }}</td>
+        </tr>
+      </tbody>
+    </table>
+    {% if detail.previous %}
+    <p class="hint">
+      Previous week ({{ detail.previous.start | shortdate }} → {{ detail.previous.end | shortdate }}):
+      {{ detail.previous.spent | money }}
+      {% if detail.previous.delta_pct is not none %}
+        ·
+        {% if detail.previous.delta > 0 %}+{% endif %}{{ detail.previous.delta | money }}
+        ({{ detail.previous.delta_pct }}%)
+      {% elif detail.previous.spent == 0 and detail.spent > 0 %}
+        · new vs last week
+      {% endif %}
+    </p>
+    <p class="hint">
+      <a href="/weeks/{{ detail.previous.start.isoformat() }}">Open previous week</a>
+    </p>
+    {% endif %}
+  </div>
+
+  {% if detail.by_category or detail.by_merchant or detail.largest %}
+  <div class="two-col">
+    <div class="panel">
+      <h2>Categories</h2>
+      {% if detail.by_category %}
+      <table>
+        <thead><tr><th>Category</th><th class="num">Spent</th></tr></thead>
+        <tbody>
+          {% for row in detail.by_category %}
+          <tr>
+            <td><a href="/categories/{{ row.name | urlquote }}">{{ row.name }}</a></td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No categories this week.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel">
+      <h2>Merchants</h2>
+      {% if detail.by_merchant %}
+      <table>
+        <thead><tr><th>Merchant</th><th class="num">Spent</th></tr></thead>
+        <tbody>
+          {% for row in detail.by_merchant %}
+          <tr>
+            <td><a href="/merchants/{{ row.name | urlquote }}">{{ row.name }}</a></td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No merchants this week.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Largest transactions</h2>
+    {% if detail.largest %}
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Merchant</th>
+          <th>Category</th>
+          <th class="num">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in detail.largest %}
+        <tr>
+          <td>{{ tx.date | shortdate }}</td>
+          <td>{% if tx.merchant %}<a href="/merchants/{{ tx.merchant | urlquote }}">{{ tx.merchant }}</a>{% else %}—{% endif %}</td>
+          <td>{% if tx.category %}<a href="/categories/{{ tx.category | urlquote }}">{{ tx.category }}</a>{% else %}—{% endif %}</td>
+          <td class="num">{{ tx.amount | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No outflow transactions this week.</p>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="panel">
+    <p class="hint">No discretionary spending in this week.</p>
+  </div>
+  {% endif %}
+{% endblock %}

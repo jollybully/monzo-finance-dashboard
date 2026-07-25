@@ -208,7 +208,9 @@
         {% for w in weeks %}
         <tr>
           <td>
-            {{ w.start | shortdate }} → {{ w.end | shortdate }}
+            <a href="/weeks/{{ w.start.isoformat() }}">
+              {{ w.start | shortdate }} → {{ w.end | shortdate }}
+            </a>
             {% if w.is_current %}<span class="hint">(current)</span>{% endif %}
           </td>
           <td class="num">{{ w.spent | money }}</td>

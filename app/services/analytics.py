@@ -244,6 +244,52 @@ def compare_weeks(
     return rows
 
 
+def week_detail(
+    db: Session,
+    week_start: date,
+    *,
+    today: date | None = None,
+    top_n: int = 10,
+) -> dict:
+    """Deep dive one Mon–Sun week: categories, merchants, largest txs, vs previous week."""
+    today = today or date.today()
+    top_n = _clamp_top_n(top_n)
+    monday = monday_of(week_start)
+    sunday = monday + timedelta(days=6)
+    is_current = monday <= today <= sunday
+    end = min(sunday, today) if is_current else sunday
+
+    stats = summarize_period(db, monday, end, top_n=top_n)
+    avg_daily, _ = _pace(stats.spent, monday, end)
+
+    prev_start = monday - timedelta(days=7)
+    prev_end = monday - timedelta(days=1)
+    prev_stats = summarize_period(db, prev_start, prev_end, top_n=1)
+    delta = stats.spent - prev_stats.spent
+    delta_pct = None
+    if prev_stats.spent > 0:
+        delta_pct = (delta / prev_stats.spent * Decimal("100")).quantize(Decimal("0.1"))
+
+    return {
+        "start": monday,
+        "end": end,
+        "is_current": is_current,
+        "spent": stats.spent,
+        "income": stats.income,
+        "avg_daily": avg_daily,
+        "by_category": stats.by_category,
+        "by_merchant": stats.by_merchant,
+        "largest": stats.largest,
+        "previous": {
+            "start": prev_start,
+            "end": prev_end,
+            "spent": prev_stats.spent,
+            "delta": delta,
+            "delta_pct": delta_pct,
+        },
+    }
+
+
 def _clamp_top_n(top_n: int, *, default: int = 10, hard_max: int = 25) -> int:
     try:
         n = int(top_n)

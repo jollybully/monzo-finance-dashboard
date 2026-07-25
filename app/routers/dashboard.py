@@ -20,6 +20,7 @@ from app.services.analytics import (
     pay_period_to_date_stats,
     previous_pay_period_stats,
     savings_rate,
+    week_detail,
 )
 from app.services.balance import get_or_create_settings
 from app.services.bills import (
@@ -293,6 +294,23 @@ def spending(request: Request, db: Session = Depends(get_db)):
             "prev": prev,
             "budgets": budgets,
             "category_mix_chart": category_mix_chart,
+        },
+    )
+
+
+@router.get("/weeks/{week_start}", response_class=HTMLResponse)
+def week_page(request: Request, week_start: str, db: Session = Depends(get_db)):
+    today = date.today()
+    parsed = _as_date(week_start)
+    if parsed is None:
+        return RedirectResponse(url="/", status_code=303)
+    detail = week_detail(db, parsed, today=today, top_n=10)
+    return templates.TemplateResponse(
+        request,
+        "week_detail.html",
+        {
+            "active": "overview",
+            "detail": detail,
         },
     )
 
