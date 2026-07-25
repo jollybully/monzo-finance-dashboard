@@ -446,7 +446,10 @@ def _by_month_rows(matched: list[Transaction]) -> list[dict]:
     by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     for tx in matched:
         by_month[tx.date.strftime("%Y-%m")] += abs(tx.amount or Decimal("0.00"))
-    return [{"month": k, "total": by_month[k]} for k in sorted(by_month.keys())]
+    return [
+        {"month": k, "total": by_month[k]}
+        for k in sorted(by_month.keys(), reverse=True)
+    ]
 
 
 def _merchant_outflows(

@@ -17,6 +17,72 @@ _MERCHANT_KEYS = frozenset({"merchant", "top_merchant"})
 _AMBIGUOUS_KEYS = frozenset({"name"})
 _MIN_NAME_LEN = 2
 
+# Single-word names that collide with ordinary English (e.g. retailer Next vs "next payday").
+# These only link when the match looks like a proper noun (Title Case or ALL CAPS).
+_AMBIGUOUS_SINGLE_WORDS = frozenset(
+    {
+        "next",
+        "boots",
+        "gap",
+        "prime",
+        "plus",
+        "go",
+        "now",
+        "open",
+        "super",
+        "family",
+        "home",
+        "office",
+        "general",
+        "local",
+        "national",
+        "and",
+        "the",
+        "for",
+        "with",
+        "from",
+        "over",
+        "under",
+        "into",
+        "this",
+        "that",
+        "your",
+        "our",
+        "all",
+        "new",
+        "old",
+        "day",
+        "week",
+        "month",
+        "period",
+        "spend",
+        "spent",
+        "safe",
+        "pace",
+        "bill",
+        "bills",
+        "budget",
+        "co",
+        "uk",
+    }
+)
+
+
+def _looks_like_proper_noun(matched: str) -> bool:
+    """True for Title Case or ALL-CAPS brand-style tokens."""
+    if not matched:
+        return False
+    if matched.isupper() and len(matched) > 1:
+        return True
+    return matched[0].isupper() and not matched.islower()
+
+
+def _is_ambiguous_single_word(name: str) -> bool:
+    cleaned = name.strip()
+    if " " in cleaned or "-" in cleaned or "&" in cleaned:
+        return False
+    return cleaned.lower() in _AMBIGUOUS_SINGLE_WORDS
+
 
 def _walk_fact_names(
     node: Any,
@@ -160,9 +226,12 @@ def linkify_finance_text(text: str, entities: list[tuple[str, str]]) -> str:
     parts: list[str] = []
     last = 0
     for match in pattern.finditer(text):
-        parts.append(html.escape(text[last : match.start()]))
         matched = match.group(1)
         display, kind = by_lower[matched.lower()]
+        # Avoid linking ordinary English like "next payday" to retailer Next.
+        if _is_ambiguous_single_word(display) and not _looks_like_proper_noun(matched):
+            continue
+        parts.append(html.escape(text[last : match.start()]))
         path = "merchants" if kind == "merchant" else "categories"
         href = quote(display, safe="")
         parts.append(f'<a href="/{path}/{href}">{html.escape(matched)}</a>')
