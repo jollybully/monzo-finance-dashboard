@@ -15,6 +15,7 @@ from app.services.analytics import (
     NON_DISCRETIONARY_CATEGORIES,
     category_detail,
     compare_pay_periods,
+    compare_weeks,
     merchant_detail,
     pay_period_to_date_stats,
     previous_pay_period_stats,
@@ -185,6 +186,17 @@ def overview(request: Request, db: Session = Depends(get_db)):
         ],
         "values": [row.normalised_28d for row in period_rows],
     }
+    weeks = compare_weeks(db, count=8)
+    this_week = weeks[0] if weeks else None
+    last_week = weeks[1] if len(weeks) > 1 else None
+    week_delta = None
+    week_delta_pct = None
+    if this_week and last_week:
+        week_delta = this_week.spent - last_week.spent
+        if last_week.spent > 0:
+            week_delta_pct = (
+                week_delta / last_week.spent * Decimal("100")
+            ).quantize(Decimal("0.1"))
     insight = get_latest_insight(db, ok_only=True) if insights_configured() else None
     insight_html = None
     if insight and insight.ok:
@@ -211,6 +223,11 @@ def overview(request: Request, db: Session = Depends(get_db)):
             "pace_over": pace_over,
             "pace_chart": pace_chart,
             "periods_chart": periods_chart,
+            "weeks": weeks,
+            "this_week": this_week,
+            "last_week": last_week,
+            "week_delta": week_delta,
+            "week_delta_pct": week_delta_pct,
             "insights_enabled": insights_configured(),
             "insight": insight,
             "insight_html": insight_html,

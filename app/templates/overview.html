@@ -181,6 +181,47 @@
   </div>
 
   <div class="panel">
+    <h3>Weekly spend</h3>
+    <p class="hint">Mon–Sun · discretionary · current week through today.</p>
+    {% if this_week and last_week %}
+    <p class="chart-verdict {% if week_delta and week_delta > 0 %}over{% elif week_delta and week_delta < 0 %}under{% endif %}">
+      This week {{ this_week.spent | money }}
+      · last week {{ last_week.spent | money }}
+      {% if week_delta is not none %}
+        ·
+        {% if week_delta > 0 %}+{% endif %}{{ week_delta | money }}
+        {% if week_delta_pct is not none %}({{ week_delta_pct }}%){% endif %}
+      {% endif %}
+    </p>
+    {% elif this_week %}
+    <p class="chart-verdict">This week {{ this_week.spent | money }} (no prior week to compare).</p>
+    {% endif %}
+    {% if weeks %}
+    <table>
+      <thead>
+        <tr>
+          <th>Week</th>
+          <th class="num">Spent</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in weeks %}
+        <tr>
+          <td>
+            {{ w.start | shortdate }} → {{ w.end | shortdate }}
+            {% if w.is_current %}<span class="hint">(current)</span>{% endif %}
+          </td>
+          <td class="num">{{ w.spent | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No weekly history yet.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
     <h3>Top categories</h3>
     {% if mtd.by_category %}
     <table>

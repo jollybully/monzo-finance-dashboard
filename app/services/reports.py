@@ -12,7 +12,12 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import ReportRun
-from app.services.analytics import day_stats, savings_rate, summarize_period
+from app.services.analytics import (
+    day_stats,
+    previous_full_week_bounds,
+    savings_rate,
+    summarize_period,
+)
 from app.services.balance import get_or_create_settings
 from app.services.bills import bills_due_by
 from app.services.budgets import over_budget
@@ -65,14 +70,6 @@ def _recipient(db: Session) -> str:
     settings = get_settings()
     row = get_or_create_settings(db)
     return (row.email_to or settings.email_to or "").strip()
-
-
-def _week_bounds(today: date) -> tuple[date, date]:
-    weekday = today.weekday()
-    this_monday = today - timedelta(days=weekday)
-    start = this_monday - timedelta(days=7)
-    end = this_monday - timedelta(days=1)
-    return start, end
 
 
 def _month_bounds_for_report(today: date) -> tuple[date, date]:
@@ -161,7 +158,7 @@ def build_weekly_report(
     db: Session, today: date | None = None
 ) -> tuple[str, str, str, date, date, str, str, int]:
     today = today or date.today()
-    start, end = _week_bounds(today)
+    start, end = previous_full_week_bounds(today)
     prev_start = start - timedelta(days=7)
     prev_end = end - timedelta(days=7)
     week = summarize_period(db, start, end)
@@ -318,7 +315,7 @@ def catch_up_missed_reports(db: Session) -> list[str]:
             monday, time(cfg.report_weekly_hour, cfg.report_weekly_minute), tzinfo=tz
         )
         if now >= scheduled:
-            start, end = _week_bounds(today)
+            start, end = previous_full_week_bounds(today)
             if not _already_sent(db, "weekly", start, end):
                 _send("weekly")
 

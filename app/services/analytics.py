@@ -172,6 +172,78 @@ def savings_rate(income: Decimal, spent: Decimal) -> Decimal | None:
     return ((income - spent) / income * Decimal("100")).quantize(Decimal("0.1"))
 
 
+def monday_of(day: date) -> date:
+    return day - timedelta(days=day.weekday())
+
+
+def current_week_bounds(today: date | None = None) -> tuple[date, date]:
+    """Current Mon–Sun week, clipped to today for the open week."""
+    today = today or date.today()
+    start = monday_of(today)
+    sunday = start + timedelta(days=6)
+    return start, min(sunday, today)
+
+
+def previous_full_week_bounds(today: date | None = None) -> tuple[date, date]:
+    """Completed Mon–Sun week before the current week (weekly report window)."""
+    today = today or date.today()
+    this_monday = monday_of(today)
+    start = this_monday - timedelta(days=7)
+    end = this_monday - timedelta(days=1)
+    return start, end
+
+
+@dataclass
+class WeekComparison:
+    start: date
+    end: date
+    is_current: bool
+    days_elapsed: int
+    spent: Decimal
+
+
+def compare_weeks(
+    db: Session,
+    *,
+    count: int = 8,
+    today: date | None = None,
+) -> list[WeekComparison]:
+    """Recent Mon–Sun discretionary spend. Index 0 is the current (possibly open) week."""
+    today = today or date.today()
+    count = max(1, min(int(count), 24))
+    rows: list[WeekComparison] = []
+
+    cur_start, cur_end = current_week_bounds(today)
+    cur_stats = summarize_period(db, cur_start, cur_end, top_n=1)
+    rows.append(
+        WeekComparison(
+            start=cur_start,
+            end=cur_end,
+            is_current=True,
+            days_elapsed=max((cur_end - cur_start).days + 1, 1),
+            spent=cur_stats.spent,
+        )
+    )
+
+    cursor_monday = monday_of(today) - timedelta(days=7)
+    while len(rows) < count:
+        start = cursor_monday
+        end = cursor_monday + timedelta(days=6)
+        stats = summarize_period(db, start, end, top_n=1)
+        rows.append(
+            WeekComparison(
+                start=start,
+                end=end,
+                is_current=False,
+                days_elapsed=7,
+                spent=stats.spent,
+            )
+        )
+        cursor_monday -= timedelta(days=7)
+
+    return rows
+
+
 def _clamp_top_n(top_n: int, *, default: int = 10, hard_max: int = 25) -> int:
     try:
         n = int(top_n)
