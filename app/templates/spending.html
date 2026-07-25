@@ -11,10 +11,10 @@
 
   {% if category_mix_chart %}
   <div class="panel chart-panel">
-    <h2>Category mix</h2>
-    <p class="hint">Discretionary spend this pay period — where the money is going.</p>
+    <h2>Spend by category</h2>
+    <p class="hint">Discretionary outflows this pay period, largest categories first.</p>
     <div class="chart-frame tall" data-chart="horizontalBars" data-chart-data="category-mix-data">
-      <canvas aria-label="Category spend mix"></canvas>
+      <canvas aria-label="Spend by category this pay period"></canvas>
     </div>
     <script type="application/json" id="category-mix-data">{{ category_mix_chart | chart_json | safe }}</script>
   </div>

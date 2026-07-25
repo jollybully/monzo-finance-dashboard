@@ -214,6 +214,11 @@
       overs[i] ? t.danger : hexToRgba(t.accent, 0.75)
     );
     const limits = data.limits;
+    // Grow frame so Chart.js does not auto-skip category labels.
+    const frame = canvas.closest(".chart-frame");
+    if (frame && labels.length) {
+      frame.style.height = Math.max(220, labels.length * 38 + 48) + "px";
+    }
     const datasets = [
       {
         label: data.value_label || "Spent",
@@ -262,7 +267,13 @@
           y: {
             ...baseOptions(t).scales.y,
             grid: { display: false },
-            ticks: { color: t.ink, font: { family: t.body, size: 12 } },
+            ticks: {
+              color: t.ink,
+              font: { family: t.body, size: 12 },
+              autoSkip: false,
+              maxRotation: 0,
+              minRotation: 0,
+            },
           },
         },
       },
