@@ -1,5 +1,7 @@
+import json
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
+from typing import Any
 from urllib.parse import quote, unquote
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -12,6 +14,7 @@ from app.models import ReportRun
 from app.services.analytics import (
     NON_DISCRETIONARY_CATEGORIES,
     category_detail,
+    compare_pay_periods,
     merchant_detail,
     pay_period_to_date_stats,
     previous_pay_period_stats,
@@ -116,10 +119,45 @@ def _urlquote(value: str | None) -> str:
     return quote(str(value or ""), safe="")
 
 
+def _chart_json(value: Any) -> str:
+    """Serialize chart payloads; Decimals/dates become JSON numbers/strings."""
+
+    def default(obj: Any) -> Any:
+        if isinstance(obj, Decimal):
+            return float(obj)
+        if isinstance(obj, datetime):
+            return obj.date().isoformat()
+        if isinstance(obj, date):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+    return json.dumps(value, default=default)
+
+
 templates.env.filters["money"] = _money
 templates.env.filters["shortdate"] = _shortdate
 templates.env.filters["shortdatetime"] = _shortdatetime
 templates.env.filters["urlquote"] = _urlquote
+templates.env.filters["chart_json"] = _chart_json
+
+
+def _month_label(yyyy_mm: str) -> str:
+    try:
+        year, month = yyyy_mm.split("-")
+        return date(int(year), int(month), 1).strftime("%b %Y")
+    except (ValueError, TypeError):
+        return yyyy_mm
+
+
+def _monthly_trend_chart(by_month: list[dict] | None) -> dict | None:
+    if not by_month:
+        return None
+    # Table is newest-first; chart reads left→right oldest→newest.
+    chronological = list(reversed(by_month))
+    return {
+        "labels": [_month_label(str(row["month"])) for row in chronological],
+        "values": [row["total"] for row in chronological],
+    }
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -130,6 +168,23 @@ def overview(request: Request, db: Session = Depends(get_db)):
     stats = pay_period_to_date_stats(db)
     income = monthly_income_total(db)
     rate = savings_rate(income, stats.spent)
+    days_elapsed = max((period.today - period.start).days + 1, 1)
+    avg_daily = (stats.spent / Decimal(days_elapsed)).quantize(Decimal("0.01"))
+    safe_daily = safe.safe_daily_spend or Decimal("0.00")
+    pace_over = avg_daily > safe_daily if safe_daily > 0 else False
+    pace_chart = {
+        "avg_daily": avg_daily,
+        "safe_daily": safe_daily,
+    }
+    period_rows = list(reversed(compare_pay_periods(db, count=6)))
+    periods_chart = {
+        "labels": [
+            f"{row.start.day} {row.start.strftime('%b')}"
+            + ("*" if row.is_current else "")
+            for row in period_rows
+        ],
+        "values": [row.normalised_28d for row in period_rows],
+    }
     insight = get_latest_insight(db, ok_only=True) if insights_configured() else None
     insight_html = None
     if insight and insight.ok:
@@ -152,6 +207,10 @@ def overview(request: Request, db: Session = Depends(get_db)):
             "mtd": stats,
             "income": income,
             "savings_rate": rate,
+            "avg_daily": avg_daily,
+            "pace_over": pace_over,
+            "pace_chart": pace_chart,
+            "periods_chart": periods_chart,
             "insights_enabled": insights_configured(),
             "insight": insight,
             "insight_html": insight_html,
@@ -200,6 +259,13 @@ def spending(request: Request, db: Session = Depends(get_db)):
     mtd = pay_period_to_date_stats(db, today, top_n=8)
     prev = previous_pay_period_stats(db, today, top_n=8)
     budgets = budget_progress(db, today)
+    category_mix_chart = None
+    if mtd.by_category:
+        category_mix_chart = {
+            "labels": [row.name for row in mtd.by_category],
+            "values": [row.total for row in mtd.by_category],
+            "value_label": "Spent",
+        }
     return templates.TemplateResponse(
         request,
         "spending.html",
@@ -209,6 +275,7 @@ def spending(request: Request, db: Session = Depends(get_db)):
             "mtd": mtd,
             "prev": prev,
             "budgets": budgets,
+            "category_mix_chart": category_mix_chart,
         },
     )
 
@@ -244,6 +311,9 @@ def category_page(request: Request, name: str, db: Session = Depends(get_db)):
             "category_name": category_name,
             "detail": detail,
             "budget": budget,
+            "monthly_chart": _monthly_trend_chart(
+                detail.get("by_month") if detail else None
+            ),
         },
     )
 
@@ -271,6 +341,9 @@ def merchant_page(request: Request, name: str, db: Session = Depends(get_db)):
             "period": period,
             "merchant_name": merchant_name,
             "detail": detail,
+            "monthly_chart": _monthly_trend_chart(
+                detail.get("by_month") if detail else None
+            ),
         },
     )
 
@@ -401,22 +474,67 @@ def bills_dismiss(suggestion_id: int, db: Session = Depends(get_db)):
 @router.get("/forecast", response_class=HTMLResponse)
 def forecast_page(request: Request, db: Session = Depends(get_db)):
     forecast = build_forecast(db, days=30)
+    runway_chart = None
+    if len(forecast.timeline) > 1:
+        labels: list[str] = []
+        values: list[Decimal] = []
+        markers: list[str | None] = []
+        notes: list[str] = []
+        for point in forecast.timeline:
+            labels.append(f"{point.date.day} {point.date.strftime('%b')}")
+            values.append(point.balance)
+            kinds = {e.kind for e in (point.events or [])}
+            if "income" in kinds:
+                markers.append("payday")
+            elif "bill" in kinds:
+                markers.append("bill")
+            else:
+                markers.append(None)
+            if point.events:
+                notes.append(
+                    "; ".join(
+                        f"{e.kind}: {e.name} {_money(e.amount)}" for e in point.events
+                    )
+                )
+            else:
+                notes.append("")
+        runway_chart = {
+            "labels": labels,
+            "values": values,
+            "markers": markers,
+            "notes": notes,
+        }
     return templates.TemplateResponse(
         request,
         "forecast.html",
-        {"active": "forecast", "forecast": forecast},
+        {
+            "active": "forecast",
+            "forecast": forecast,
+            "runway_chart": runway_chart,
+        },
     )
 
 
 @router.get("/budgets", response_class=HTMLResponse)
 def budgets_page(request: Request, db: Session = Depends(get_db)):
+    progress = budget_progress(db)
+    headroom_chart = None
+    if progress:
+        headroom_chart = {
+            "labels": [b.category for b in progress],
+            "values": [b.spent for b in progress],
+            "limits": [b.monthly_limit for b in progress],
+            "over": [b.over for b in progress],
+            "value_label": "Spent",
+        }
     return templates.TemplateResponse(
         request,
         "budgets.html",
         {
             "active": "budgets",
             "budgets": list_budgets(db),
-            "progress": budget_progress(db),
+            "progress": progress,
+            "headroom_chart": headroom_chart,
             "categories": list_seen_categories(db),
             "message": request.query_params.get("message"),
             "error": request.query_params.get("error"),

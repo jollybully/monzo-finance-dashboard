@@ -154,6 +154,32 @@
     </div>
   </div>
 
+  <div class="two-col">
+    <div class="panel chart-panel">
+      <h3>Pace vs safe daily</h3>
+      <p class="chart-verdict {% if pace_over %}over{% else %}under{% endif %}">
+        Averaging {{ avg_daily | money }}/day
+        {% if pace_over %}— above safe {{ safe.safe_daily_spend | money }}{% else %}— within safe {{ safe.safe_daily_spend | money }}{% endif %}.
+      </p>
+      <div class="chart-frame compact" data-chart="paceCompare" data-chart-data="pace-chart-data">
+        <canvas aria-label="Pace versus safe daily spend"></canvas>
+      </div>
+      <script type="application/json" id="pace-chart-data">{{ pace_chart | chart_json | safe }}</script>
+    </div>
+    <div class="panel chart-panel">
+      <h3>Recent pay periods</h3>
+      <p class="hint">28-day normalised discretionary spend (fair for 4- vs 5-week cycles). * = current period.</p>
+      {% if periods_chart.values %}
+      <div class="chart-frame" data-chart="periodSeries" data-chart-data="periods-chart-data">
+        <canvas aria-label="Normalised spend across recent pay periods"></canvas>
+      </div>
+      <script type="application/json" id="periods-chart-data">{{ periods_chart | chart_json | safe }}</script>
+      {% else %}
+      <p class="hint">Not enough pay-period history yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
   <div class="panel">
     <h3>Top categories</h3>
     {% if mtd.by_category %}
@@ -172,4 +198,8 @@
     <p class="hint">No spending synced yet for this pay period.</p>
     {% endif %}
   </div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="/static/charts.js"></script>
 {% endblock %}

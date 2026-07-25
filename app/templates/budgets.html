@@ -32,6 +32,15 @@
   <div class="panel">
     <h2>This month</h2>
     {% if progress %}
+    {% if headroom_chart %}
+    <div class="chart-panel">
+      <p class="hint">Spent vs monthly limit — red bars are already over.</p>
+      <div class="chart-frame tall" data-chart="horizontalBars" data-chart-data="headroom-chart-data">
+        <canvas aria-label="Budget spent versus limits"></canvas>
+      </div>
+      <script type="application/json" id="headroom-chart-data">{{ headroom_chart | chart_json | safe }}</script>
+    </div>
+    {% endif %}
     <div class="budget-list">
       {% for b in progress %}
       <div class="budget-row">
@@ -82,4 +91,10 @@
     <p class="hint">Nothing to manage yet.</p>
     {% endif %}
   </div>
+{% endblock %}
+{% block scripts %}
+{% if headroom_chart %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="/static/charts.js"></script>
+{% endif %}
 {% endblock %}

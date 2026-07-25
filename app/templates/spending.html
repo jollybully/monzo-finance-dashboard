@@ -9,6 +9,17 @@
     Budgets stay calendar-month and still count all outflows in a category.
   </p>
 
+  {% if category_mix_chart %}
+  <div class="panel chart-panel">
+    <h2>Category mix</h2>
+    <p class="hint">Discretionary spend this pay period — where the money is going.</p>
+    <div class="chart-frame tall" data-chart="horizontalBars" data-chart-data="category-mix-data">
+      <canvas aria-label="Category spend mix"></canvas>
+    </div>
+    <script type="application/json" id="category-mix-data">{{ category_mix_chart | chart_json | safe }}</script>
+  </div>
+  {% endif %}
+
   <div class="two-col">
     <div class="panel">
       <h2>Categories</h2>
@@ -127,4 +138,10 @@
     <p class="hint">No outflow transactions this period.</p>
     {% endif %}
   </div>
+{% endblock %}
+{% block scripts %}
+{% if category_mix_chart %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="/static/charts.js"></script>
+{% endif %}
 {% endblock %}

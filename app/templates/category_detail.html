@@ -96,8 +96,14 @@
       {% endif %}
     </div>
 
-    <div class="panel">
+    <div class="panel chart-panel">
       <h2>Monthly trend</h2>
+      {% if monthly_chart %}
+      <div class="chart-frame" data-chart="monthlyTrend" data-chart-data="monthly-chart-data">
+        <canvas aria-label="Monthly spend trend"></canvas>
+      </div>
+      <script type="application/json" id="monthly-chart-data">{{ monthly_chart | chart_json | safe }}</script>
+      {% endif %}
       {% if detail.by_month %}
       <table>
         <thead><tr><th>Month</th><th class="num">Spent</th></tr></thead>
@@ -154,6 +160,12 @@
     {% endif %}
     {% if detail.by_month %}
     <h2>Monthly trend</h2>
+    {% if monthly_chart %}
+    <div class="chart-frame" data-chart="monthlyTrend" data-chart-data="monthly-chart-data-empty">
+      <canvas aria-label="Monthly spend trend"></canvas>
+    </div>
+    <script type="application/json" id="monthly-chart-data-empty">{{ monthly_chart | chart_json | safe }}</script>
+    {% endif %}
     <table>
       <thead><tr><th>Month</th><th class="num">Spent</th></tr></thead>
       <tbody>
@@ -173,4 +185,10 @@
     <p class="hint">No spending in {{ category_name }} for this pay period or the last 6 months.</p>
   </div>
   {% endif %}
+{% endblock %}
+{% block scripts %}
+{% if monthly_chart %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="/static/charts.js"></script>
+{% endif %}
 {% endblock %}

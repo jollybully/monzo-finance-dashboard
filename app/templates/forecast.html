@@ -19,6 +19,17 @@
     </div>
   </div>
 
+  {% if runway_chart %}
+  <div class="panel chart-panel">
+    <h2>Balance runway</h2>
+    <p class="hint">Projected balance from income and bills only — everyday spend is not included. Markers highlight payday and bill days.</p>
+    <div class="chart-frame tall" data-chart="balanceRunway" data-chart-data="runway-chart-data">
+      <canvas aria-label="Projected balance runway"></canvas>
+    </div>
+    <script type="application/json" id="runway-chart-data">{{ runway_chart | chart_json | safe }}</script>
+  </div>
+  {% endif %}
+
   <div class="panel">
     <h2>Timeline</h2>
     {% if forecast.timeline|length > 1 %}
@@ -52,4 +63,10 @@
     <p class="hint">No income or bills scheduled in the next 30 days. Add rules in Settings and bills on Bills.</p>
     {% endif %}
   </div>
+{% endblock %}
+{% block scripts %}
+{% if runway_chart %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="/static/charts.js"></script>
+{% endif %}
 {% endblock %}
