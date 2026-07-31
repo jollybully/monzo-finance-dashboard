@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import logging
 from calendar import monthrange
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 
+from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from app.models import UpcomingBill
+from app.models import Transaction, UpcomingBill
+
+logger = logging.getLogger(__name__)
 
 
 def _add_months(d: date, months: int = 1) -> date:
@@ -87,8 +91,147 @@ def advance_overdue_bills(db: Session, today: date | None = None) -> int:
     return updated
 
 
+def _normalize_bill_key(name: str | None) -> str:
+    if not name:
+        return ""
+    return " ".join(name.strip().lower().split())
+
+
+def _merchant_matches_bill(bill_name: str, merchant: str | None) -> bool:
+    bill_key = _normalize_bill_key(bill_name)
+    merch_key = _normalize_bill_key(merchant)
+    if not bill_key or not merch_key:
+        return False
+    # Short brands (O2): require token/prefix match, not loose substring.
+    if len(bill_key) < 3:
+        return merch_key == bill_key or merch_key.startswith(bill_key + " ")
+    return bill_key in merch_key or merch_key in bill_key
+
+
+def _amount_close(tx_amount: Decimal, bill_amount: Decimal) -> bool:
+    """Exact match, or within 1% for tiny card rounding (min 1p)."""
+    paid = abs(tx_amount or Decimal("0"))
+    expected = abs(bill_amount or Decimal("0"))
+    if expected <= 0:
+        return False
+    if paid == expected:
+        return True
+    tol = max(Decimal("0.01"), (expected * Decimal("0.01")).quantize(Decimal("0.01")))
+    return abs(paid - expected) <= tol
+
+
+def _advance_bill_after_payment(bill: UpcomingBill, paid_on: date) -> bool:
+    """Move next_due past this payment. Returns True if the bill row changed."""
+    if bill.frequency == "once":
+        if bill.active:
+            bill.active = False
+            return True
+        return False
+
+    due = bill.next_due_date
+    nxt = _step_due(bill, due)
+    if nxt is None or nxt <= due:
+        bill.active = False
+        return True
+    # Keep stepping while still on/before the payment date (covers early pays).
+    while nxt <= paid_on:
+        stepped = _step_due(bill, nxt)
+        if stepped is None or stepped <= nxt:
+            break
+        nxt = stepped
+    if nxt != bill.next_due_date:
+        bill.next_due_date = nxt
+        return True
+    return False
+
+
+def reconcile_paid_bills(db: Session, today: date | None = None) -> int:
+    """Advance Upcoming Bills when a matching Monzo outflow is found near the due date.
+
+    Requires amount match within a date window around next_due. Merchant name
+    (substring either way) only boosts score when amounts collide — bill labels
+    often differ from Monzo (e.g. Rent → JETTA Dorling).
+    """
+    today = today or date.today()
+    advance_overdue_bills(db, today)
+
+    bills = (
+        db.query(UpcomingBill)
+        .filter(
+            UpcomingBill.active.is_(True),
+            UpcomingBill.next_due_date <= today + timedelta(days=3),
+        )
+        .order_by(UpcomingBill.amount.desc(), UpcomingBill.id)
+        .all()
+    )
+    if not bills:
+        return 0
+
+    window_start = today - timedelta(days=14)
+    txs = (
+        db.query(Transaction)
+        .filter(
+            and_(
+                Transaction.date >= window_start,
+                Transaction.date <= today,
+                Transaction.amount < 0,
+            )
+        )
+        .order_by(Transaction.date.desc(), Transaction.id.desc())
+        .all()
+    )
+    if not txs:
+        return 0
+
+    used_tx_ids: set[int] = set()
+    updated = 0
+
+    for bill in bills:
+        due = bill.next_due_date
+        match_start = due - timedelta(days=5)
+        match_end = due + timedelta(days=3)
+        best: tuple[int, Transaction] | None = None  # score, tx
+
+        for tx in txs:
+            if tx.id in used_tx_ids:
+                continue
+            if tx.date < match_start or tx.date > match_end:
+                continue
+            # Amount near due date is required (Rent ≠ JETTA Dorling on Monzo).
+            # Merchant match only boosts score when several bills share an amount.
+            if not _amount_close(tx.amount, bill.amount):
+                continue
+            score = 50
+            if _merchant_matches_bill(bill.name, tx.merchant):
+                score = 100
+            score -= abs((tx.date - due).days)
+            if best is None or score > best[0]:
+                best = (score, tx)
+
+        if best is None:
+            continue
+
+        _, tx = best
+        if _advance_bill_after_payment(bill, tx.date):
+            used_tx_ids.add(tx.id)
+            updated += 1
+            logger.info(
+                "Advanced bill %s (%s) after %s %s on %s → next due %s",
+                bill.id,
+                bill.name,
+                tx.merchant,
+                tx.amount,
+                tx.date,
+                bill.next_due_date,
+            )
+
+    if updated:
+        db.commit()
+    return updated
+
+
 def list_active_bills(db: Session) -> list[UpcomingBill]:
-    advance_overdue_bills(db)
+    reconcile_paid_bills(db)
     return (
         db.query(UpcomingBill)
         .filter(UpcomingBill.active.is_(True))
@@ -98,7 +241,7 @@ def list_active_bills(db: Session) -> list[UpcomingBill]:
 
 
 def list_all_bills(db: Session) -> list[UpcomingBill]:
-    advance_overdue_bills(db)
+    reconcile_paid_bills(db)
     return (
         db.query(UpcomingBill)
         .order_by(UpcomingBill.active.desc(), UpcomingBill.next_due_date, UpcomingBill.name)
@@ -167,7 +310,6 @@ def bill_occurrences(
 def bills_due_by(db: Session, end: date, *, today: date | None = None) -> list[BillOccurrence]:
     """All bill charges from today through end (inclusive), expanding weekly/monthly recurrence."""
     today = today or date.today()
-    advance_overdue_bills(db, today)
     occurrences: list[BillOccurrence] = []
     for bill in list_active_bills(db):
         occurrences.extend(bill_occurrences(bill, today, end))

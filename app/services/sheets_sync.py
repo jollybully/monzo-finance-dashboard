@@ -242,8 +242,14 @@ def sync_transactions(db: Session) -> SyncResult:
     else:
         db.commit()
 
+    from app.services.bills import reconcile_paid_bills
+
+    bills_advanced = reconcile_paid_bills(db)
+
     settings = mark_synced(db)
     msg = f"Synced {inserted} new, {updated} updated"
+    if bills_advanced:
+        msg += f", advanced {bills_advanced} bill{'s' if bills_advanced != 1 else ''}"
     if balance_as_of is None and inserted:
         msg += " (balance unchanged — set Current balance in Settings to match Monzo)"
     elif skipped_balance and balance_delta == 0:
