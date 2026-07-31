@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Weekly spend{% endblock %}
+{% block content %}
+  <p class="hint"><a href="/">← Overview</a></p>
+  <h1>Weekly spend</h1>
+  <p class="lede">
+    Mon–Sun discretionary spend. Use per-day pace for the open week, and pick any two weeks to see what moved.
+  </p>
+
+  {% if weeks_bench.avg_spent is not none %}
+  <p class="chart-verdict">
+    Completed-week average {{ weeks_bench.avg_spent | money }}
+    · best {{ weeks_bench.best_spent | money }}
+    · worst {{ weeks_bench.worst_spent | money }}
+    · {{ weeks_bench.avg_daily | money }}/day
+  </p>
+  {% endif %}
+
+  {% if weeks_chart.values %}
+  <div class="panel chart-panel">
+    <h2>Trend</h2>
+    <p class="hint">Oldest → newest · * = current week (to date).</p>
+    <div class="chart-frame" data-chart="monthlyTrend" data-chart-data="weeks-chart-data">
+      <canvas aria-label="Discretionary spend by week"></canvas>
+    </div>
+    <script type="application/json" id="weeks-chart-data">{{ weeks_chart | chart_json | safe }}</script>
+  </div>
+  {% endif %}
+
+  <div class="panel">
+    <h2>Compare two weeks</h2>
+    <p class="hint">A minus B · positive means A spent more.</p>
+    <form method="get" action="/weeks" class="form-stack">
+      <div class="two-col">
+        <label>
+          Week A
+          <select name="a">
+            {% for w in weeks %}
+            <option value="{{ w.start.isoformat() }}" {% if week_a and w.start == week_a %}selected{% endif %}>
+              {{ w.start | shortdate }} → {{ w.end | shortdate }}{% if w.is_current %} (current){% endif %} — {{ w.spent | money }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Week B
+          <select name="b">
+            {% for w in weeks %}
+            <option value="{{ w.start.isoformat() }}" {% if week_b and w.start == week_b %}selected{% endif %}>
+              {{ w.start | shortdate }} → {{ w.end | shortdate }}{% if w.is_current %} (current){% endif %} — {{ w.spent | money }}
+            </option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+      <button type="submit">Compare</button>
+    </form>
+
+    {% if compare %}
+    <p class="chart-verdict {% if compare.delta > 0 %}over{% elif compare.delta < 0 %}under{% endif %}">
+      A {{ compare.a.spent | money }} ({{ compare.a.avg_daily | money }}/day)
+      vs B {{ compare.b.spent | money }} ({{ compare.b.avg_daily | money }}/day)
+      ·
+      {% if compare.delta > 0 %}+{% endif %}{{ compare.delta | money }}
+      {% if compare.delta_pct is not none %}({{ compare.delta_pct }}%){% endif %}
+    </p>
+    <p class="hint">
+      <a href="/weeks/{{ compare.a.start.isoformat() }}">Open A</a>
+      ·
+      <a href="/weeks/{{ compare.b.start.isoformat() }}">Open B</a>
+    </p>
+
+    <div class="two-col">
+      <div>
+        <h3>Categories</h3>
+        {% if compare.by_category %}
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="num">A</th>
+              <th class="num">B</th>
+              <th class="num">Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in compare.by_category %}
+            <tr>
+              <td><a href="/categories/{{ row.name | urlquote }}">{{ row.name }}</a></td>
+              <td class="num">{{ row.a | money }}</td>
+              <td class="num">{{ row.b | money }}</td>
+              <td class="num">{% if row.delta > 0 %}+{% endif %}{{ row.delta | money }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="hint">No category differences.</p>
+        {% endif %}
+      </div>
+      <div>
+        <h3>Merchants</h3>
+        {% if compare.by_merchant %}
+        <table>
+          <thead>
+            <tr>
+              <th>Merchant</th>
+              <th class="num">A</th>
+              <th class="num">B</th>
+              <th class="num">Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in compare.by_merchant %}
+            <tr>
+              <td><a href="/merchants/{{ row.name | urlquote }}">{{ row.name }}</a></td>
+              <td class="num">{{ row.a | money }}</td>
+              <td class="num">{{ row.b | money }}</td>
+              <td class="num">{% if row.delta > 0 %}+{% endif %}{{ row.delta | money }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="hint">No merchant differences.</p>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>All weeks</h2>
+    {% if weeks %}
+    <table>
+      <thead>
+        <tr>
+          <th>Week</th>
+          <th class="num">Spent</th>
+          <th class="num">/ day</th>
+          <th class="num">vs prev</th>
+          <th class="num">vs avg</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in weeks %}
+        <tr>
+          <td>
+            <a href="/weeks/{{ w.start.isoformat() }}">
+              {{ w.start | shortdate }} → {{ w.end | shortdate }}
+            </a>
+            {% if w.is_current %}<span class="hint">(current)</span>{% endif %}
+          </td>
+          <td class="num">
+            {{ w.spent | money }}
+            {% if w.projected_full is not none %}
+            <span class="hint">→ {{ w.projected_full | money }}</span>
+            {% endif %}
+          </td>
+          <td class="num">{{ w.avg_daily | money }}</td>
+          <td class="num">
+            {% if w.delta_vs_prev is not none %}
+              {% if w.delta_vs_prev > 0 %}+{% endif %}{{ w.delta_vs_prev | money }}
+              {% if w.delta_pct_vs_prev is not none %}
+              <span class="hint">({{ w.delta_pct_vs_prev }}%)</span>
+              {% endif %}
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          <td class="num">
+            {% if w.is_current %}
+            <span class="hint">—</span>
+            {% elif w.delta_vs_avg is not none %}
+              {% if w.delta_vs_avg > 0 %}+{% endif %}{{ w.delta_vs_avg | money }}
+            {% else %}
+            —
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No weekly history yet.</p>
+    {% endif %}
+  </div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+<script src="/static/charts.js"></script>
+{% endblock %}

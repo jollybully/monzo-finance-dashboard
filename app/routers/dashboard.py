@@ -15,12 +15,14 @@ from app.services.analytics import (
     NON_DISCRETIONARY_CATEGORIES,
     category_detail,
     compare_pay_periods,
+    compare_two_weeks,
     compare_weeks,
     merchant_detail,
     pay_period_to_date_stats,
     previous_pay_period_stats,
     savings_rate,
     week_detail,
+    weeks_benchmark,
 )
 from app.services.balance import get_or_create_settings
 from app.services.bills import (
@@ -190,14 +192,19 @@ def overview(request: Request, db: Session = Depends(get_db)):
     weeks = compare_weeks(db, count=8)
     this_week = weeks[0] if weeks else None
     last_week = weeks[1] if len(weeks) > 1 else None
-    week_delta = None
-    week_delta_pct = None
-    if this_week and last_week:
-        week_delta = this_week.spent - last_week.spent
-        if last_week.spent > 0:
-            week_delta_pct = (
-                week_delta / last_week.spent * Decimal("100")
-            ).quantize(Decimal("0.1"))
+    week_delta = this_week.delta_vs_prev if this_week else None
+    week_delta_pct = this_week.delta_pct_vs_prev if this_week else None
+    weeks_bench = weeks_benchmark(weeks)
+    # Chart chronological (oldest → newest), matching pay-period series.
+    week_rows_chrono = list(reversed(weeks))
+    weeks_chart = {
+        "labels": [
+            f"{row.start.day} {row.start.strftime('%b')}"
+            + ("*" if row.is_current else "")
+            for row in week_rows_chrono
+        ],
+        "values": [row.spent for row in week_rows_chrono],
+    }
     insight = get_latest_insight(db, ok_only=True) if insights_configured() else None
     insight_html = None
     if insight and insight.ok:
@@ -229,6 +236,8 @@ def overview(request: Request, db: Session = Depends(get_db)):
             "last_week": last_week,
             "week_delta": week_delta,
             "week_delta_pct": week_delta_pct,
+            "weeks_bench": weeks_bench,
+            "weeks_chart": weeks_chart,
             "insights_enabled": insights_configured(),
             "insight": insight,
             "insight_html": insight_html,
@@ -298,19 +307,67 @@ def spending(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/weeks", response_class=HTMLResponse)
+def weeks_page(request: Request, db: Session = Depends(get_db)):
+    today = date.today()
+    weeks = compare_weeks(db, count=16, today=today)
+    bench = weeks_benchmark(weeks)
+    week_rows_chrono = list(reversed(weeks))
+    weeks_chart = {
+        "labels": [
+            f"{row.start.day} {row.start.strftime('%b')}"
+            + ("*" if row.is_current else "")
+            for row in week_rows_chrono
+        ],
+        "values": [row.spent for row in week_rows_chrono],
+    }
+
+    a_raw = request.query_params.get("a")
+    b_raw = request.query_params.get("b")
+    week_a = _as_date(a_raw) if a_raw else None
+    week_b = _as_date(b_raw) if b_raw else None
+    if week_a is None and weeks:
+        week_a = weeks[0].start
+    if week_b is None and len(weeks) > 1:
+        week_b = weeks[1].start
+
+    compare = None
+    if week_a is not None and week_b is not None:
+        compare = compare_two_weeks(db, week_a, week_b, today=today, top_n=12)
+
+    return templates.TemplateResponse(
+        request,
+        "weeks.html",
+        {
+            "active": "overview",
+            "weeks": weeks,
+            "weeks_bench": bench,
+            "weeks_chart": weeks_chart,
+            "week_a": week_a,
+            "week_b": week_b,
+            "compare": compare,
+        },
+    )
+
+
 @router.get("/weeks/{week_start}", response_class=HTMLResponse)
 def week_page(request: Request, week_start: str, db: Session = Depends(get_db)):
     today = date.today()
     parsed = _as_date(week_start)
     if parsed is None:
-        return RedirectResponse(url="/", status_code=303)
-    detail = week_detail(db, parsed, today=today, top_n=10)
+        return RedirectResponse(url="/weeks", status_code=303)
+    vs_raw = request.query_params.get("vs")
+    vs = _as_date(vs_raw) if vs_raw else None
+    detail = week_detail(db, parsed, today=today, top_n=10, vs=vs)
+    weeks = compare_weeks(db, count=16, today=today)
     return templates.TemplateResponse(
         request,
         "week_detail.html",
         {
             "active": "overview",
             "detail": detail,
+            "weeks": weeks,
+            "vs": vs,
         },
     )
 

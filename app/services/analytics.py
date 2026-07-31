@@ -200,6 +200,11 @@ class WeekComparison:
     is_current: bool
     days_elapsed: int
     spent: Decimal
+    avg_daily: Decimal
+    projected_full: Decimal | None
+    delta_vs_prev: Decimal | None
+    delta_pct_vs_prev: Decimal | None
+    delta_vs_avg: Decimal | None
 
 
 def compare_weeks(
@@ -210,38 +215,172 @@ def compare_weeks(
 ) -> list[WeekComparison]:
     """Recent Mon–Sun discretionary spend. Index 0 is the current (possibly open) week."""
     today = today or date.today()
-    count = max(1, min(int(count), 24))
-    rows: list[WeekComparison] = []
+    count = max(1, min(int(count), 26))
+    raw: list[tuple[date, date, bool, int, Decimal]] = []
 
     cur_start, cur_end = current_week_bounds(today)
     cur_stats = summarize_period(db, cur_start, cur_end, top_n=1)
-    rows.append(
-        WeekComparison(
-            start=cur_start,
-            end=cur_end,
-            is_current=True,
-            days_elapsed=max((cur_end - cur_start).days + 1, 1),
-            spent=cur_stats.spent,
+    raw.append(
+        (
+            cur_start,
+            cur_end,
+            True,
+            max((cur_end - cur_start).days + 1, 1),
+            cur_stats.spent,
         )
     )
 
     cursor_monday = monday_of(today) - timedelta(days=7)
-    while len(rows) < count:
+    while len(raw) < count:
         start = cursor_monday
         end = cursor_monday + timedelta(days=6)
         stats = summarize_period(db, start, end, top_n=1)
+        raw.append((start, end, False, 7, stats.spent))
+        cursor_monday -= timedelta(days=7)
+
+    completed = [spent for _, _, is_cur, _, spent in raw if not is_cur]
+    avg_completed = (
+        (sum(completed, Decimal("0.00")) / Decimal(len(completed))).quantize(
+            Decimal("0.01")
+        )
+        if completed
+        else None
+    )
+
+    rows: list[WeekComparison] = []
+    for i, (start, end, is_current, days, spent) in enumerate(raw):
+        avg_daily = (spent / Decimal(days)).quantize(Decimal("0.01"))
+        projected = None
+        if is_current:
+            projected = (avg_daily * Decimal("7")).quantize(Decimal("0.01"))
+
+        delta_vs_prev = None
+        delta_pct_vs_prev = None
+        if i + 1 < len(raw):
+            prev_spent = raw[i + 1][4]
+            delta_vs_prev = spent - prev_spent
+            if prev_spent > 0:
+                delta_pct_vs_prev = (
+                    delta_vs_prev / prev_spent * Decimal("100")
+                ).quantize(Decimal("0.1"))
+
+        delta_vs_avg = None
+        if avg_completed is not None and not is_current:
+            delta_vs_avg = spent - avg_completed
+
         rows.append(
             WeekComparison(
                 start=start,
                 end=end,
-                is_current=False,
-                days_elapsed=7,
-                spent=stats.spent,
+                is_current=is_current,
+                days_elapsed=days,
+                spent=spent,
+                avg_daily=avg_daily,
+                projected_full=projected,
+                delta_vs_prev=delta_vs_prev,
+                delta_pct_vs_prev=delta_pct_vs_prev,
+                delta_vs_avg=delta_vs_avg,
             )
         )
-        cursor_monday -= timedelta(days=7)
-
     return rows
+
+
+def weeks_benchmark(weeks: list[WeekComparison]) -> dict[str, Decimal | None]:
+    """Average / best / worst among completed weeks in a compare_weeks result."""
+    completed = [w for w in weeks if not w.is_current]
+    if not completed:
+        return {
+            "avg_spent": None,
+            "best_spent": None,
+            "worst_spent": None,
+            "avg_daily": None,
+        }
+    spent_vals = [w.spent for w in completed]
+    avg_spent = (sum(spent_vals, Decimal("0.00")) / Decimal(len(spent_vals))).quantize(
+        Decimal("0.01")
+    )
+    avg_daily = (
+        sum((w.avg_daily for w in completed), Decimal("0.00"))
+        / Decimal(len(completed))
+    ).quantize(Decimal("0.01"))
+    return {
+        "avg_spent": avg_spent,
+        "best_spent": min(spent_vals),
+        "worst_spent": max(spent_vals),
+        "avg_daily": avg_daily,
+    }
+
+
+def _week_span(
+    week_start: date, *, today: date | None = None
+) -> tuple[date, date, bool]:
+    today = today or date.today()
+    monday = monday_of(week_start)
+    sunday = monday + timedelta(days=6)
+    is_current = monday <= today <= sunday
+    end = min(sunday, today) if is_current else sunday
+    return monday, end, is_current
+
+
+def _diff_maps(
+    left: dict[str, Decimal],
+    right: dict[str, Decimal],
+    *,
+    top_n: int,
+) -> list[dict[str, str | Decimal]]:
+    keys = set(left) | set(right)
+    rows: list[dict[str, str | Decimal]] = []
+    for name in keys:
+        a = left.get(name, Decimal("0.00"))
+        b = right.get(name, Decimal("0.00"))
+        rows.append({"name": name, "a": a, "b": b, "delta": a - b})
+    rows.sort(key=lambda r: abs(Decimal(r["delta"])), reverse=True)
+    return rows[:top_n]
+
+
+def compare_two_weeks(
+    db: Session,
+    week_a: date,
+    week_b: date,
+    *,
+    today: date | None = None,
+    top_n: int = 10,
+) -> dict:
+    """Side-by-side discretionary spend for two Mon–Sun weeks (a vs b)."""
+    today = today or date.today()
+    top_n = _clamp_top_n(top_n)
+    a_start, a_end, a_current = _week_span(week_a, today=today)
+    b_start, b_end, b_current = _week_span(week_b, today=today)
+
+    a_cat, a_merch, a_spent, _ = _outflow_maps(db, a_start, a_end, discretionary=True)
+    b_cat, b_merch, b_spent, _ = _outflow_maps(db, b_start, b_end, discretionary=True)
+    a_avg, _ = _pace(a_spent, a_start, a_end)
+    b_avg, _ = _pace(b_spent, b_start, b_end)
+    delta = a_spent - b_spent
+    delta_pct = None
+    if b_spent > 0:
+        delta_pct = (delta / b_spent * Decimal("100")).quantize(Decimal("0.1"))
+
+    return {
+        "a": {
+            "start": a_start,
+            "end": a_end,
+            "is_current": a_current,
+            "spent": a_spent,
+            "avg_daily": a_avg,
+        },
+        "b": {
+            "start": b_start,
+            "end": b_end,
+            "is_current": b_current,
+            "spent": b_spent,
+            "avg_daily": b_avg,
+        },
+        "delta": delta,
+        "delta_pct": delta_pct,
+        "by_category": _diff_maps(a_cat, b_cat, top_n=top_n),
+        "by_merchant": _diff_maps(a_merch, b_merch, top_n=top_n),
+    }
 
 
 def week_detail(
@@ -250,17 +389,18 @@ def week_detail(
     *,
     today: date | None = None,
     top_n: int = 10,
+    vs: date | None = None,
 ) -> dict:
     """Deep dive one Mon–Sun week: categories, merchants, largest txs, vs previous week."""
     today = today or date.today()
     top_n = _clamp_top_n(top_n)
-    monday = monday_of(week_start)
-    sunday = monday + timedelta(days=6)
-    is_current = monday <= today <= sunday
-    end = min(sunday, today) if is_current else sunday
+    monday, end, is_current = _week_span(week_start, today=today)
 
     stats = summarize_period(db, monday, end, top_n=top_n)
     avg_daily, _ = _pace(stats.spent, monday, end)
+    projected_full = None
+    if is_current:
+        projected_full = (avg_daily * Decimal("7")).quantize(Decimal("0.01"))
 
     prev_start = monday - timedelta(days=7)
     prev_end = monday - timedelta(days=1)
@@ -270,6 +410,10 @@ def week_detail(
     if prev_stats.spent > 0:
         delta_pct = (delta / prev_stats.spent * Decimal("100")).quantize(Decimal("0.1"))
 
+    compare = None
+    if vs is not None and monday_of(vs) != monday:
+        compare = compare_two_weeks(db, monday, vs, today=today, top_n=top_n)
+
     return {
         "start": monday,
         "end": end,
@@ -277,6 +421,7 @@ def week_detail(
         "spent": stats.spent,
         "income": stats.income,
         "avg_daily": avg_daily,
+        "projected_full": projected_full,
         "by_category": stats.by_category,
         "by_merchant": stats.by_merchant,
         "largest": stats.largest,
@@ -287,6 +432,7 @@ def week_detail(
             "delta": delta,
             "delta_pct": delta_pct,
         },
+        "compare": compare,
     }
 
 

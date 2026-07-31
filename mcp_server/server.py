@@ -12,6 +12,8 @@ from app.services.analytics import (
     category_breakdown,
     category_detail,
     compare_pay_periods as compare_pay_periods_svc,
+    compare_two_weeks as compare_two_weeks_svc,
+    compare_weeks as compare_weeks_svc,
     data_range,
     day_stats,
     merchant_detail,
@@ -19,6 +21,8 @@ from app.services.analytics import (
     month_to_date_stats,
     pay_period_to_date_stats,
     search_merchants as search_merchants_svc,
+    week_detail as week_detail_svc,
+    weeks_benchmark,
 )
 from app.services.bills import bills_due_by, list_active_bills
 from app.services.budgets import budget_progress
@@ -43,6 +47,8 @@ Rules:
 - This is not mortgage or regulated financial advice.
 - Prefer get_spending_snapshot or compare_pay_periods for top-level questions,
   then drill with get_category_detail / get_merchant_detail.
+- For week-to-week discretionary spend, use compare_weeks or compare_two_weeks;
+  prefer avg_daily when the current week is still open.
 """.strip()
 
 mcp = FastMCP(
@@ -154,6 +160,63 @@ def compare_pay_periods(count: int = 6, top_n: int = 5) -> dict[str, Any]:
             ),
             "periods": to_jsonable(rows),
         }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def compare_weeks(count: int = 12) -> dict[str, Any]:
+    """Recent Mon–Sun discretionary weeks with avg_daily, vs previous, and vs completed-week average."""
+    db = _db()
+    try:
+        rows = compare_weeks_svc(db, count=count)
+        return {
+            "count": len(rows),
+            "benchmark": to_jsonable(weeks_benchmark(rows)),
+            "note": (
+                "Index 0 is the current (possibly open) week. "
+                "Use avg_daily / projected_full for the open week; raw spent is to-date."
+            ),
+            "weeks": to_jsonable(rows),
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def compare_two_weeks(
+    week_a: str,
+    week_b: str,
+    top_n: int = 10,
+) -> dict[str, Any]:
+    """Side-by-side discretionary spend for two weeks (pass any date in each Mon–Sun week)."""
+    db = _db()
+    try:
+        return to_jsonable(
+            compare_two_weeks_svc(
+                db,
+                _parse_date(week_a),
+                _parse_date(week_b),
+                top_n=top_n,
+            )
+        )
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_week_detail(week_start: str, top_n: int = 10, vs: str | None = None) -> dict[str, Any]:
+    """Deep dive one Mon–Sun week; optional vs=YYYY-MM-DD for category/merchant deltas."""
+    db = _db()
+    try:
+        return to_jsonable(
+            week_detail_svc(
+                db,
+                _parse_date(week_start),
+                top_n=top_n,
+                vs=_parse_date(vs) if vs else None,
+            )
+        )
     finally:
         db.close()
 

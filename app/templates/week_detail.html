@@ -1,7 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Week {{ detail.start | shortdate }}{% endblock %}
 {% block content %}
-  <p class="hint"><a href="/">← Overview</a></p>
+  <p class="hint">
+    <a href="/">← Overview</a>
+    ·
+    <a href="/weeks">All weeks</a>
+  </p>
   <h1>
     {{ detail.start | shortdate }} → {{ detail.end | shortdate }}
     {% if detail.is_current %}<span class="hint">(current)</span>{% endif %}
@@ -23,6 +27,12 @@
           <td>Per day</td>
           <td class="num">{{ detail.avg_daily | money }}</td>
         </tr>
+        {% if detail.projected_full is not none %}
+        <tr>
+          <td>Projected full week</td>
+          <td class="num">{{ detail.projected_full | money }}</td>
+        </tr>
+        {% endif %}
         <tr>
           <td>Inflows</td>
           <td class="num">{{ detail.income | money }}</td>
@@ -43,7 +53,96 @@
     </p>
     <p class="hint">
       <a href="/weeks/{{ detail.previous.start.isoformat() }}">Open previous week</a>
+      ·
+      <a href="/weeks?a={{ detail.start.isoformat() }}&b={{ detail.previous.start.isoformat() }}">Compare vs previous</a>
     </p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2>Compare with another week</h2>
+    <form method="get" action="/weeks/{{ detail.start.isoformat() }}" class="form-stack">
+      <label>
+        Versus
+        <select name="vs">
+          <option value="">Previous week only</option>
+          {% for w in weeks %}
+          {% if w.start != detail.start %}
+          <option value="{{ w.start.isoformat() }}" {% if vs and w.start == vs %}selected{% endif %}>
+            {{ w.start | shortdate }} → {{ w.end | shortdate }}{% if w.is_current %} (current){% endif %} — {{ w.spent | money }}
+          </option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Compare</button>
+    </form>
+
+    {% if detail.compare %}
+    {% set compare = detail.compare %}
+    <p class="chart-verdict {% if compare.delta > 0 %}over{% elif compare.delta < 0 %}under{% endif %}">
+      This week {{ compare.a.spent | money }} vs
+      {{ compare.b.start | shortdate }} week {{ compare.b.spent | money }}
+      ·
+      {% if compare.delta > 0 %}+{% endif %}{{ compare.delta | money }}
+      {% if compare.delta_pct is not none %}({{ compare.delta_pct }}%){% endif %}
+    </p>
+    <div class="two-col">
+      <div>
+        <h3>Categories</h3>
+        {% if compare.by_category %}
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th class="num">This</th>
+              <th class="num">Other</th>
+              <th class="num">Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in compare.by_category %}
+            <tr>
+              <td><a href="/categories/{{ row.name | urlquote }}">{{ row.name }}</a></td>
+              <td class="num">{{ row.a | money }}</td>
+              <td class="num">{{ row.b | money }}</td>
+              <td class="num">{% if row.delta > 0 %}+{% endif %}{{ row.delta | money }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="hint">No category differences.</p>
+        {% endif %}
+      </div>
+      <div>
+        <h3>Merchants</h3>
+        {% if compare.by_merchant %}
+        <table>
+          <thead>
+            <tr>
+              <th>Merchant</th>
+              <th class="num">This</th>
+              <th class="num">Other</th>
+              <th class="num">Δ</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in compare.by_merchant %}
+            <tr>
+              <td><a href="/merchants/{{ row.name | urlquote }}">{{ row.name }}</a></td>
+              <td class="num">{{ row.a | money }}</td>
+              <td class="num">{{ row.b | money }}</td>
+              <td class="num">{% if row.delta > 0 %}+{% endif %}{{ row.delta | money }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="hint">No merchant differences.</p>
+        {% endif %}
+      </div>
+    </div>
     {% endif %}
   </div>
 
