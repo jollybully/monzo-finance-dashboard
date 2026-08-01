@@ -13,6 +13,7 @@ Self-hosted dashboard for Monzo: sync transactions from Google Sheets, track bil
 - **Digests** — daily / weekly / monthly via email and Pushover
 - **AI coaching** — optional Gemini insights on Overview and in the weekly digest (pace vs safe daily, leaks, habits)
 - **Finance MCP** — read-only Cursor tools for spend/merchant/bill interrogation (pay-period pace, 4- vs 5-week comparisons)
+- **Receipt addons (optional)** — separate `lidl-sync` container pulls Lidl Plus line items into shared Postgres; dashboard shows item drill-down under Groceries → Lidl without coupling to core Monzo sync
 
 ## Stack
 
@@ -130,6 +131,20 @@ Stop with `Ctrl+C`, or run detached:
 docker compose up --build -d
 docker compose logs -f finance-app
 ```
+
+### Optional: Lidl Plus receipts
+
+Lidl runs as an isolated addon. If it breaks or you omit it, the finance dashboard is unchanged.
+
+1. Put `LIDL_REFRESH_TOKEN` in `.env` (one-time browser OAuth — see community Lidl Plus login helpers). The token **rotates** on every sync and is also stored in `source_auth`.
+2. Start with the addons profile:
+
+```bash
+docker compose --profile addons up -d --build
+docker compose logs -f lidl-sync
+```
+
+3. Open **Spending → Groceries → Lidl** for receipts and top items, or `/receipts/lidl/{id}` / `/receipts/lidl/items/{product_id}`.
 
 ---
 

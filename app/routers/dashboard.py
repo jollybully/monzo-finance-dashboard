@@ -55,6 +55,12 @@ from app.services.recurring import (
     list_suggestions,
 )
 from app.services.reports import generate_and_send_report
+from app.services.receipts import (
+    get_receipt,
+    item_spend,
+    list_receipt_sources,
+    merchant_receipt_context,
+)
 from app.services.safe_spend import calculate_safe_spend
 from app.services.sheets_sync import sync_transactions
 from app.services.insight_links import build_insight_html, collect_link_entities
@@ -286,6 +292,7 @@ def spending(request: Request, db: Session = Depends(get_db)):
     mtd = pay_period_to_date_stats(db, today, top_n=8)
     prev = previous_pay_period_stats(db, today, top_n=8)
     budgets = budget_progress(db, today)
+    receipt_sources = list_receipt_sources(db)
     category_mix_chart = None
     if mtd.by_category:
         category_mix_chart = {
@@ -302,6 +309,7 @@ def spending(request: Request, db: Session = Depends(get_db)):
             "mtd": mtd,
             "prev": prev,
             "budgets": budgets,
+            "receipt_sources": receipt_sources,
             "category_mix_chart": category_mix_chart,
         },
     )
@@ -425,6 +433,12 @@ def merchant_page(request: Request, name: str, db: Session = Depends(get_db)):
         compare_previous=True,
         series_start=today - timedelta(days=183),
     )
+    receipt_ctx = merchant_receipt_context(
+        db,
+        merchant_name,
+        start=today - timedelta(days=183),
+        end=today,
+    )
     return templates.TemplateResponse(
         request,
         "merchant_detail.html",
@@ -433,9 +447,85 @@ def merchant_page(request: Request, name: str, db: Session = Depends(get_db)):
             "period": period,
             "merchant_name": merchant_name,
             "detail": detail,
+            "receipt_ctx": receipt_ctx,
             "monthly_chart": _monthly_trend_chart(
                 detail.get("by_month") if detail else None
             ),
+        },
+    )
+
+
+@router.get("/receipts/{source}/items/by-name/{description}", response_class=HTMLResponse)
+def receipt_item_by_name_page(
+    request: Request, source: str, description: str, db: Session = Depends(get_db)
+):
+    today = date.today()
+    period = current_pay_period(db, today)
+    src = source.strip().lower()
+    desc = unquote(description).strip()
+    history_start = today - timedelta(days=183)
+    detail = item_spend(
+        db, src, description=desc, start=history_start, end=today
+    )
+    period_detail = item_spend(
+        db, src, description=desc, start=period.start, end=today
+    )
+    return templates.TemplateResponse(
+        request,
+        "receipt_item.html",
+        {
+            "active": "spending",
+            "period": period,
+            "source": src,
+            "item_label": desc,
+            "detail": detail,
+            "period_detail": period_detail,
+        },
+    )
+
+
+@router.get("/receipts/{source}/items/{product_id}", response_class=HTMLResponse)
+def receipt_item_page(
+    request: Request, source: str, product_id: str, db: Session = Depends(get_db)
+):
+    today = date.today()
+    period = current_pay_period(db, today)
+    src = source.strip().lower()
+    pid = unquote(product_id).strip()
+    history_start = today - timedelta(days=183)
+    detail = item_spend(
+        db, src, product_id=pid, start=history_start, end=today
+    )
+    period_detail = item_spend(
+        db, src, product_id=pid, start=period.start, end=today
+    )
+    return templates.TemplateResponse(
+        request,
+        "receipt_item.html",
+        {
+            "active": "spending",
+            "period": period,
+            "source": src,
+            "item_label": pid,
+            "detail": detail,
+            "period_detail": period_detail,
+        },
+    )
+
+
+@router.get("/receipts/{source}/{external_id}", response_class=HTMLResponse)
+def receipt_page(
+    request: Request, source: str, external_id: str, db: Session = Depends(get_db)
+):
+    receipt = get_receipt(db, source.strip().lower(), unquote(external_id).strip())
+    if receipt is None:
+        raise HTTPException(status_code=404, detail="Receipt not found")
+    return templates.TemplateResponse(
+        request,
+        "receipt_detail.html",
+        {
+            "active": "spending",
+            "receipt": receipt,
         },
     )
 

@@ -49,6 +49,9 @@ Rules:
   then drill with get_category_detail / get_merchant_detail.
 - For week-to-week discretionary spend, use compare_weeks or compare_two_weeks;
   prefer avg_daily when the current week is still open.
+- Optional receipt tools (get_receipt_list / get_receipt_detail /
+  get_receipt_item_spend) expose Lidl (and later other) line items. Receipt
+  totals enrich Monzo merchant spend — do not double-count them as extra spend.
 """.strip()
 
 mcp = FastMCP(
@@ -511,6 +514,151 @@ def get_latest_coach_insight() -> dict[str, Any]:
             "habits": insight.habits,
             "created_at": insight.created_at.isoformat() if insight.created_at else None,
             "model": insight.model,
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_receipt_list(
+    source: str = "lidl",
+    start: str | None = None,
+    end: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """List synced retailer receipts (line-item enrichment). Empty if the addon has not run."""
+    from app.services.receipts import list_receipts, receipts_available
+
+    db = _db()
+    try:
+        if not receipts_available(db):
+            return {"available": False, "receipts": []}
+        s, e = _default_range(db)
+        start_d = _parse_date(start, default=s)
+        end_d = _parse_date(end, default=e)
+        rows = list_receipts(
+            db,
+            source.strip().lower() or None,
+            start=start_d,
+            end=end_d,
+            limit=max(1, min(int(limit), 100)),
+        )
+        return {
+            "available": True,
+            "source": source,
+            "start": start_d.isoformat(),
+            "end": end_d.isoformat(),
+            "receipts": [
+                {
+                    "external_id": r.external_id,
+                    "purchased_at": r.purchased_at.isoformat() if r.purchased_at else None,
+                    "purchase_date": r.purchase_date.isoformat(),
+                    "total_amount": money(r.total_amount),
+                    "currency": r.currency,
+                    "store_name": r.store_name,
+                    "store_locality": r.store_locality,
+                    "transaction_id": r.transaction_id,
+                }
+                for r in rows
+            ],
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_receipt_detail(source: str, external_id: str) -> dict[str, Any]:
+    """Full receipt with line items for a retailer source (e.g. lidl)."""
+    from app.services.receipts import get_receipt, receipts_available
+
+    db = _db()
+    try:
+        if not receipts_available(db):
+            return {"available": False, "found": False}
+        receipt = get_receipt(db, source.strip().lower(), external_id.strip())
+        if receipt is None:
+            return {"available": True, "found": False}
+        return {
+            "available": True,
+            "found": True,
+            "source": receipt.source,
+            "external_id": receipt.external_id,
+            "purchased_at": receipt.purchased_at.isoformat() if receipt.purchased_at else None,
+            "total_amount": money(receipt.total_amount),
+            "currency": receipt.currency,
+            "store_name": receipt.store_name,
+            "store_locality": receipt.store_locality,
+            "store_postcode": receipt.store_postcode,
+            "transaction_id": receipt.transaction_id,
+            "items": [
+                {
+                    "product_id": i.product_id,
+                    "description": i.description,
+                    "quantity": str(i.quantity),
+                    "unit_price": money(i.unit_price),
+                    "net_total": money(i.net_total),
+                    "is_weight": i.is_weight,
+                }
+                for i in (receipt.items or [])
+            ],
+        }
+    finally:
+        db.close()
+
+
+@mcp.tool()
+def get_receipt_item_spend(
+    source: str = "lidl",
+    product_id: str | None = None,
+    description: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> dict[str, Any]:
+    """Spend on one receipt product over a date range. Prefer product_id when known."""
+    from app.services.receipts import item_spend, receipts_available
+
+    db = _db()
+    try:
+        if not receipts_available(db):
+            return {"available": False}
+        s, e = _default_range(db)
+        start_d = _parse_date(start, default=s)
+        end_d = _parse_date(end, default=e)
+        detail = item_spend(
+            db,
+            source.strip().lower(),
+            product_id=product_id,
+            description=description,
+            start=start_d,
+            end=end_d,
+        )
+        if detail is None:
+            return {"available": True, "found": False}
+        return {
+            "available": True,
+            "found": True,
+            "source": detail["source"],
+            "product_id": detail.get("product_id"),
+            "description": detail.get("description"),
+            "start": start_d.isoformat(),
+            "end": end_d.isoformat(),
+            "total": money(detail["total"]),
+            "quantity": str(detail["quantity"]),
+            "count": detail["count"],
+            "by_month": [
+                {"month": row["month"], "total": money(row["total"])}
+                for row in detail.get("by_month") or []
+            ],
+            "lines": [
+                {
+                    "date": row["date"].isoformat(),
+                    "quantity": str(row["quantity"]),
+                    "net_total": money(row["net_total"]),
+                    "store_name": row.get("store_name"),
+                    "receipt_external_id": row.get("receipt_external_id"),
+                }
+                for row in detail.get("lines") or []
+            ],
         }
     finally:
         db.close()

@@ -60,6 +60,36 @@
     </div>
   </div>
 
+  {% if receipt_sources %}
+  <div class="panel">
+    <h2>Grocery receipts</h2>
+    <p class="hint">
+      Line-item detail from optional retailer addons (separate from Monzo card swipes).
+      Available even when this pay period has no synced transactions yet.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Source</th>
+          <th class="num">Receipts</th>
+          <th class="num">Items</th>
+          <th>Latest</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for src in receipt_sources %}
+        <tr>
+          <td><a href="{{ src.href }}">{{ src.display_name }}</a></td>
+          <td class="num">{{ src.receipt_count }}</td>
+          <td class="num">{{ src.item_count }}</td>
+          <td>{% if src.latest %}{{ src.latest | shortdate }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
   <div class="panel">
     <h2>Budgets this month</h2>
     {% if budgets %}

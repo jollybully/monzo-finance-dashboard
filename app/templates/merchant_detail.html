@@ -135,6 +135,70 @@
     <p class="hint">No transactions this period.</p>
     {% endif %}
   </div>
+
+  {% if receipt_ctx and receipt_ctx.available %}
+  <div class="two-col">
+    <div class="panel">
+      <h2>Receipts</h2>
+      <p class="hint">Line items from Lidl Plus (last ~6 months). Monzo totals above remain the spend source of truth.</p>
+      {% if receipt_ctx.receipts %}
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Store</th>
+            <th class="num">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in receipt_ctx.receipts %}
+          <tr>
+            <td>
+              <a href="/receipts/{{ receipt_ctx.source }}/{{ r.external_id | urlquote }}">{{ r.purchase_date | shortdate }}</a>
+            </td>
+            <td>{{ r.store_name or r.store_locality or '—' }}</td>
+            <td class="num">{{ r.total_amount | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No receipts this period.</p>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <h2>Top items</h2>
+      {% if receipt_ctx.top_items %}
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="num">Qty</th>
+            <th class="num">Spent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in receipt_ctx.top_items %}
+          <tr>
+            <td>
+              {% if row.product_id %}
+              <a href="/receipts/{{ receipt_ctx.source }}/items/{{ row.product_id | urlquote }}">{{ row.description }}</a>
+              {% else %}
+              <a href="/receipts/{{ receipt_ctx.source }}/items/by-name/{{ row.description | urlquote }}">{{ row.description }}</a>
+              {% endif %}
+            </td>
+            <td class="num">{{ row.quantity }}</td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No item detail this period.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
   {% elif detail %}
   <div class="panel">
     <p class="hint">No spending at {{ detail.name }} for this pay period.</p>
@@ -167,10 +231,128 @@
     <p class="hint">Last ~6 months (no spend in the current pay period).</p>
     {% endif %}
   </div>
+  {% if receipt_ctx and receipt_ctx.available %}
+  <div class="two-col">
+    <div class="panel">
+      <h2>Receipts</h2>
+      <p class="hint">Line items from Lidl Plus (last ~6 months). Monzo totals above remain the spend source of truth.</p>
+      {% if receipt_ctx.receipts %}
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Store</th>
+            <th class="num">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in receipt_ctx.receipts %}
+          <tr>
+            <td>
+              <a href="/receipts/{{ receipt_ctx.source }}/{{ r.external_id | urlquote }}">{{ r.purchase_date | shortdate }}</a>
+            </td>
+            <td>{{ r.store_name or r.store_locality or '—' }}</td>
+            <td class="num">{{ r.total_amount | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No receipts this period.</p>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <h2>Top items</h2>
+      {% if receipt_ctx.top_items %}
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="num">Qty</th>
+            <th class="num">Spent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in receipt_ctx.top_items %}
+          <tr>
+            <td>
+              {% if row.product_id %}
+              <a href="/receipts/{{ receipt_ctx.source }}/items/{{ row.product_id | urlquote }}">{{ row.description }}</a>
+              {% else %}
+              <a href="/receipts/{{ receipt_ctx.source }}/items/by-name/{{ row.description | urlquote }}">{{ row.description }}</a>
+              {% endif %}
+            </td>
+            <td class="num">{{ row.quantity }}</td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No item detail this period.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
   {% else %}
   <div class="panel">
     <p class="hint">No spending at {{ merchant_name }} for this pay period or the last 6 months.</p>
   </div>
+  {% if receipt_ctx and receipt_ctx.available %}
+  <div class="two-col">
+    <div class="panel">
+      <h2>Receipts</h2>
+      <p class="hint">Line items from Lidl Plus (last ~6 months). Monzo totals above remain the spend source of truth.</p>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Store</th>
+            <th class="num">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in receipt_ctx.receipts %}
+          <tr>
+            <td>
+              <a href="/receipts/{{ receipt_ctx.source }}/{{ r.external_id | urlquote }}">{{ r.purchase_date | shortdate }}</a>
+            </td>
+            <td>{{ r.store_name or r.store_locality or '—' }}</td>
+            <td class="num">{{ r.total_amount | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Top items</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="num">Qty</th>
+            <th class="num">Spent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in receipt_ctx.top_items %}
+          <tr>
+            <td>
+              {% if row.product_id %}
+              <a href="/receipts/{{ receipt_ctx.source }}/items/{{ row.product_id | urlquote }}">{{ row.description }}</a>
+              {% else %}
+              <a href="/receipts/{{ receipt_ctx.source }}/items/by-name/{{ row.description | urlquote }}">{{ row.description }}</a>
+              {% endif %}
+            </td>
+            <td class="num">{{ row.quantity }}</td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
   {% endif %}
 {% endblock %}
 {% block scripts %}

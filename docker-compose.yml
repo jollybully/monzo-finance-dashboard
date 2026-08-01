@@ -32,5 +32,22 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Optional receipts addon — core dashboard keeps working if this is down.
+  # Start with: docker compose --profile addons up -d --build
+  lidl-sync:
+    build:
+      context: .
+      dockerfile: addons/lidl/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://finance:finance@postgres:5432/finance
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - addons
+
 volumes:
   postgres_data:

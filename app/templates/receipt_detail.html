@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Receipt {{ receipt.external_id }}{% endblock %}
+{% block content %}
+  <p class="hint">
+    <a href="/merchants/{{ (receipt.merchant_key or 'Lidl') | urlquote }}">← {{ receipt.merchant_key | title }}</a>
+  </p>
+  <h1>{{ receipt.store_name or (receipt.merchant_key | title) }}</h1>
+  <p class="lede">
+    {{ receipt.purchased_at | shortdate }}
+    {% if receipt.store_locality %} · {{ receipt.store_locality }}{% endif %}
+    {% if receipt.store_postcode %} {{ receipt.store_postcode }}{% endif %}
+    · Total {{ receipt.total_amount | money }}
+  </p>
+
+  <div class="panel">
+    <h2>Items</h2>
+    {% if receipt.items %}
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th class="num">Qty</th>
+          <th class="num">Unit</th>
+          <th class="num">Net</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in receipt.items | sort(attribute='net_total', reverse=true) %}
+        <tr>
+          <td>
+            {% if item.product_id %}
+            <a href="/receipts/{{ receipt.source }}/items/{{ item.product_id | urlquote }}">{{ item.description }}</a>
+            {% else %}
+            <a href="/receipts/{{ receipt.source }}/items/by-name/{{ item.description | urlquote }}">{{ item.description }}</a>
+            {% endif %}
+          </td>
+          <td class="num">{{ item.quantity }}</td>
+          <td class="num">{{ item.unit_price | money }}</td>
+          <td class="num">{{ item.net_total | money }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="hint">No line items on this receipt.</p>
+    {% endif %}
+  </div>
+{% endblock %}

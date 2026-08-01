@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ detail.description if detail and detail.description else item_label }}{% endblock %}
+{% block content %}
+  <p class="hint">
+    <a href="/merchants/{{ source | title | urlquote }}">← {{ source | title }}</a>
+  </p>
+  <h1>{{ detail.description if detail and detail.description else item_label }}</h1>
+  <p class="lede">
+    Last ~6 months through {{ period.today | shortdate }}.
+    Line-item spend from {{ source | title }} receipts (not double-counted against Monzo totals).
+  </p>
+
+  {% if detail and detail.count %}
+  <div class="panel">
+    <h2>Summary</h2>
+    <table>
+      <tbody>
+        <tr><td>Spent (6 months)</td><td class="num">{{ detail.total | money }}</td></tr>
+        <tr><td>Quantity</td><td class="num">{{ detail.quantity }}</td></tr>
+        <tr><td>Purchases</td><td class="num">{{ detail.count }}</td></tr>
+        {% if period_detail %}
+        <tr>
+          <td>This pay period ({{ period.start | shortdate }} → {{ period.today | shortdate }})</td>
+          <td class="num">{{ period_detail.total | money }} · {{ period_detail.count }} buy{% if period_detail.count != 1 %}s{% endif %}</td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <h2>By month</h2>
+      {% if detail.by_month %}
+      <table>
+        <thead><tr><th>Month</th><th class="num">Spent</th></tr></thead>
+        <tbody>
+          {% for row in detail.by_month %}
+          <tr>
+            <td>{{ row.month }}</td>
+            <td class="num">{{ row.total | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No monthly history.</p>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <h2>Purchases</h2>
+      {% if detail.lines %}
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Store</th>
+            <th class="num">Qty</th>
+            <th class="num">Net</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in detail.lines %}
+          <tr>
+            <td>
+              <a href="/receipts/{{ source }}/{{ row.receipt_external_id | urlquote }}">{{ row.date | shortdate }}</a>
+            </td>
+            <td>{{ row.store_name or '—' }}</td>
+            <td class="num">{{ row.quantity }}</td>
+            <td class="num">{{ row.net_total | money }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="hint">No purchases in range.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
+  <div class="panel">
+    <p class="hint">No receipt lines for this item in the last ~6 months.</p>
+  </div>
+  {% endif %}
+{% endblock %}
