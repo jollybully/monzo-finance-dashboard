@@ -156,7 +156,7 @@ docker compose logs -f lidl-sync
 4. **Bills** — add rent and other commitments, or **Scan transactions** and accept suggestions. Weekly bills are reserved for *every* occurrence until payday. Name each bill to match Monzo’s **Name** column (accepting a suggestion does this automatically) so those merchants drop out of discretionary spend and top-merchant rankings.
 5. Optionally set **Budgets** by Monzo category.
 
-Spend digests (overview, spending, emails, insights) treat Monzo **Bills**, **Savings**, and **Transfers** categories — plus merchants that match active Upcoming Bills — as non-discretionary. Card-payment refunds (positive amounts outside those categories) net against spend so merchant totals reflect reality. Budgets and bill detection still see the full history. Keep pot top-ups and internal transfers in Savings or Transfers in Monzo.
+Spend digests (overview, spending, emails, insights) treat Monzo **Bills**, **Savings**, and **Transfers** categories — plus merchants that match active Upcoming Bills — as non-discretionary. Positive **Card payment** amounts (refunds/reversals) net against spend; other credits (salary, Faster payments, pot withdrawals) count as income. Budgets and bill detection still see the full history. Keep pot top-ups and internal transfers in Savings or Transfers in Monzo.
 
 After that, sync runs on `SYNC_INTERVAL_MINUTES` (default 15). Balance only moves for transactions *after* the balance watermark (last applied transaction time, or when you last seeded).
 

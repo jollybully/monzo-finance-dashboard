@@ -40,11 +40,11 @@ Rules:
 - Cite numbers returned by tools only; do not invent balances or merchants.
 - Default spend is discretionary: Monzo categories Bills/Savings/Transfers and
   merchants matching active Upcoming Bills are excluded from spend rankings.
-  Card-payment refunds (positive amounts outside those categories) net against
-  spend; Transfers/Savings credits count as income, not refunds.
+  Positive Card payment amounts (refunds) net against spend; other credits
+  (salary, Faster payments, pots) count as income — not refunds.
 - When comparing pay periods of different lengths (e.g. 4 vs 5 weeks), prefer
   avg_daily and normalised_28d from compare_pay_periods over raw totals.
-- Budgets net category refunds against outflows (including bills categories).
+- Budgets net category card-refunds against outflows (including bills categories).
 - Forecast is income + bills only (not everyday discretionary spend).
 - This is not mortgage or regulated financial advice.
 - Prefer get_spending_snapshot or compare_pay_periods for top-level questions,

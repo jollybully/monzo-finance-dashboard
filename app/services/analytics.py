@@ -59,16 +59,29 @@ def is_non_discretionary(tx: Transaction, bill_keys: set[str]) -> bool:
     return bool(key) and key in bill_keys
 
 
-def is_income_credit(tx: Transaction) -> bool:
-    """Positive amount in Bills/Savings/Transfers (e.g. salary, pot transfers in)."""
-    amount = tx.amount or Decimal("0.00")
-    return amount > 0 and _normalize_category(tx.category) in NON_DISCRETIONARY_CATEGORIES
+def _normalize_type(tx_type: str | None) -> str:
+    if not tx_type:
+        return ""
+    return " ".join(tx_type.strip().lower().split())
 
 
 def is_refund_credit(tx: Transaction) -> bool:
-    """Positive Card-payment-style credit — nets against spend, not income."""
+    """Positive Card payment / explicit refund — nets against spend, not income.
+
+    Salary and bank transfers must NOT match here (they zeroed whole payday weeks
+    when every non-Transfers credit was treated as a refund).
+    """
     amount = tx.amount or Decimal("0.00")
-    return amount > 0 and not is_income_credit(tx)
+    if amount <= 0:
+        return False
+    t = _normalize_type(tx.type)
+    return t == "card payment" or t == "refund" or t.endswith(" refund")
+
+
+def is_income_credit(tx: Transaction) -> bool:
+    """Any positive amount that is not a card refund (salary, Faster payments, pots, etc.)."""
+    amount = tx.amount or Decimal("0.00")
+    return amount > 0 and not is_refund_credit(tx)
 
 
 def _signed_spend_contribution(amount: Decimal) -> Decimal:
@@ -77,10 +90,11 @@ def _signed_spend_contribution(amount: Decimal) -> Decimal:
 
 
 def _net_spend(txs: list[Transaction]) -> Decimal:
+    """Net discretionary spend for matched outflows + card refunds (skip income credits)."""
     total = Decimal("0.00")
     for tx in txs:
         amount = tx.amount or Decimal("0.00")
-        if amount == 0:
+        if amount == 0 or is_income_credit(tx):
             continue
         total += _signed_spend_contribution(amount)
     return total
