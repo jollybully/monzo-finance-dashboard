@@ -59,6 +59,33 @@ def is_non_discretionary(tx: Transaction, bill_keys: set[str]) -> bool:
     return bool(key) and key in bill_keys
 
 
+def is_income_credit(tx: Transaction) -> bool:
+    """Positive amount in Bills/Savings/Transfers (e.g. salary, pot transfers in)."""
+    amount = tx.amount or Decimal("0.00")
+    return amount > 0 and _normalize_category(tx.category) in NON_DISCRETIONARY_CATEGORIES
+
+
+def is_refund_credit(tx: Transaction) -> bool:
+    """Positive Card-payment-style credit — nets against spend, not income."""
+    amount = tx.amount or Decimal("0.00")
+    return amount > 0 and not is_income_credit(tx)
+
+
+def _signed_spend_contribution(amount: Decimal) -> Decimal:
+    """Outflow (−5) → +5 spent; refund (+5) → −5 spent."""
+    return -amount
+
+
+def _net_spend(txs: list[Transaction]) -> Decimal:
+    total = Decimal("0.00")
+    for tx in txs:
+        amount = tx.amount or Decimal("0.00")
+        if amount == 0:
+            continue
+        total += _signed_spend_contribution(amount)
+    return total
+
+
 def _month_bounds(today: date) -> tuple[date, date]:
     start = today.replace(day=1)
     return start, today
@@ -92,31 +119,49 @@ def summarize_period(
 
     for tx in txs:
         amount = tx.amount or Decimal("0.00")
+        if amount == 0:
+            continue
         if amount > 0:
-            income += amount
+            if is_income_credit(tx):
+                income += amount
+                continue
+            # Refund — net into discretionary spend (not income).
+            if is_non_discretionary(tx, bill_keys):
+                continue
+            spent += _signed_spend_contribution(amount)
+            category = tx.category or "Uncategorised"
+            merchant = tx.merchant or "Unknown"
+            cat[category] += _signed_spend_contribution(amount)
+            merch[merchant] += _signed_spend_contribution(amount)
             continue
         if is_non_discretionary(tx, bill_keys):
             continue
-        spent += abs(amount)
+        spent += _signed_spend_contribution(amount)
         category = tx.category or "Uncategorised"
         merchant = tx.merchant or "Unknown"
-        cat[category] += abs(amount)
-        merch[merchant] += abs(amount)
+        cat[category] += _signed_spend_contribution(amount)
+        merch[merchant] += _signed_spend_contribution(amount)
         discretionary_outflows.append(tx)
 
+    # Rankings use net totals; drop merchants/categories fully refunded in-window.
     by_category = [
         NamedTotal(name=k, total=v)
         for k, v in sorted(cat.items(), key=lambda item: item[1], reverse=True)[:top_n]
+        if v > 0
     ]
     by_merchant = [
         NamedTotal(name=k, total=v)
         for k, v in sorted(merch.items(), key=lambda item: item[1], reverse=True)[:top_n]
+        if v > 0
     ]
     largest = sorted(
         discretionary_outflows,
         key=lambda t: abs(t.amount or Decimal("0.00")),
         reverse=True,
     )[:top_n]
+
+    if spent < 0:
+        spent = Decimal("0.00")
 
     return PeriodStats(
         start=start,
@@ -472,7 +517,7 @@ def _outflow_maps(
     *,
     discretionary: bool = True,
 ) -> tuple[dict[str, Decimal], dict[str, Decimal], Decimal, int]:
-    """Category map, merchant map, total spent, outflow count."""
+    """Category map, merchant map, net spent, outflow count (refunds net, not counted)."""
     txs = query_transactions(db, start, end)
     bill_keys = active_bill_merchant_keys(db) if discretionary else set()
     cat: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
@@ -481,16 +526,31 @@ def _outflow_maps(
     count = 0
     for tx in txs:
         amount = tx.amount or Decimal("0.00")
-        if amount >= 0:
+        if amount == 0:
+            continue
+        if amount > 0:
+            if is_income_credit(tx):
+                continue
+            if discretionary and is_non_discretionary(tx, bill_keys):
+                continue
+            contrib = _signed_spend_contribution(amount)
+            spent += contrib
+            cat[tx.category or "Uncategorised"] += contrib
+            merch[tx.merchant or "Unknown"] += contrib
             continue
         if discretionary and is_non_discretionary(tx, bill_keys):
             continue
-        abs_amount = abs(amount)
-        spent += abs_amount
+        contrib = _signed_spend_contribution(amount)
+        spent += contrib
         count += 1
-        cat[tx.category or "Uncategorised"] += abs_amount
-        merch[tx.merchant or "Unknown"] += abs_amount
-    return dict(cat), dict(merch), spent, count
+        cat[tx.category or "Uncategorised"] += contrib
+        merch[tx.merchant or "Unknown"] += contrib
+    if spent < 0:
+        spent = Decimal("0.00")
+    # Drop fully-refunded names from maps used for rankings.
+    cat = {k: v for k, v in cat.items() if v > 0}
+    merch = {k: v for k, v in merch.items() if v > 0}
+    return cat, merch, spent, count
 
 
 @dataclass
@@ -709,10 +769,13 @@ def _largest_rows(
 def _by_month_rows(matched: list[Transaction]) -> list[dict]:
     by_month: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     for tx in matched:
-        by_month[tx.date.strftime("%Y-%m")] += abs(tx.amount or Decimal("0.00"))
+        amount = tx.amount or Decimal("0.00")
+        if amount == 0:
+            continue
+        by_month[tx.date.strftime("%Y-%m")] += _signed_spend_contribution(amount)
     return [
-        {"month": k, "total": by_month[k]}
-        for k in sorted(by_month.keys(), reverse=True)
+        {"month": k, "total": v if v > 0 else Decimal("0.00")}
+        for k, v in ((k, by_month[k]) for k in sorted(by_month.keys(), reverse=True))
     ]
 
 
@@ -724,7 +787,7 @@ def _merchant_outflows(
     *,
     discretionary: bool = True,
 ) -> tuple[str, list[Transaction], Decimal]:
-    """Match merchant outflows; return display name, matched txs, discretionary spend total."""
+    """Match merchant outflows + refunds; return display name, matched txs, net discretionary spend."""
     needle = normalize_merchant(name)
     if not needle:
         return name, [], Decimal("0.00")
@@ -737,18 +800,27 @@ def _merchant_outflows(
 
     for tx in txs:
         amount = tx.amount or Decimal("0.00")
-        if amount >= 0:
+        if amount == 0:
             continue
-        if discretionary and is_non_discretionary(tx, bill_keys):
-            continue
-        abs_amount = abs(amount)
-        total_discretionary += abs_amount
+        if amount > 0:
+            if is_income_credit(tx):
+                continue
+            if discretionary and is_non_discretionary(tx, bill_keys):
+                continue
+        else:
+            if discretionary and is_non_discretionary(tx, bill_keys):
+                continue
+
+        contrib = _signed_spend_contribution(amount)
+        total_discretionary += contrib
         key = normalize_merchant(tx.merchant)
         if key == needle or needle in key:
             matched.append(tx)
             if tx.merchant:
                 display_name = tx.merchant
 
+    if total_discretionary < 0:
+        total_discretionary = Decimal("0.00")
     return display_name, matched, total_discretionary
 
 
@@ -789,10 +861,13 @@ def merchant_detail(
     if not period_matched and not window_matched:
         return None
 
-    total = sum(
-        (abs(t.amount or Decimal("0.00")) for t in period_matched), Decimal("0.00")
+    total = _net_spend(period_matched)
+    if total < 0:
+        total = Decimal("0.00")
+    outflow_count = sum(
+        1 for t in period_matched if (t.amount or Decimal("0.00")) < 0
     )
-    count = len(period_matched)
+    count = outflow_count
     avg = (
         (total / Decimal(count)).quantize(Decimal("0.01"))
         if count
@@ -803,10 +878,14 @@ def merchant_detail(
 
     cats: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     for tx in period_matched:
-        cats[_category_label(tx.category)] += abs(tx.amount or Decimal("0.00"))
+        amount = tx.amount or Decimal("0.00")
+        if amount == 0:
+            continue
+        cats[_category_label(tx.category)] += _signed_spend_contribution(amount)
     by_category = [
         NamedTotal(name=k, total=v)
         for k, v in sorted(cats.items(), key=lambda item: item[1], reverse=True)[:top_n]
+        if v > 0
     ]
 
     share = None
@@ -819,14 +898,15 @@ def merchant_detail(
         _, prev_matched, _ = _merchant_outflows(
             db, display_name, prior_start, prior_end, discretionary=discretionary
         )
-        prev_total = sum(
-            (abs(t.amount or Decimal("0.00")) for t in prev_matched),
-            Decimal("0.00"),
-        )
+        prev_total = _net_spend(prev_matched)
+        if prev_total < 0:
+            prev_total = Decimal("0.00")
         previous = _previous_block(
             total=total,
             prev_total=prev_total,
-            prev_count=len(prev_matched),
+            prev_count=sum(
+                1 for t in prev_matched if (t.amount or Decimal("0.00")) < 0
+            ),
             prior_start=prior_start,
             prior_end=prior_end,
         )
@@ -865,10 +945,10 @@ def _category_outflows(
     *,
     discretionary: bool = True,
 ) -> tuple[str, list[Transaction], Decimal, Decimal]:
-    """Match outflows in one category.
+    """Match outflows + refunds in one category.
 
-    Returns display name, matched txs, discretionary spend total, and all-outflow total
-    (for share % when drilling into Bills/Savings/Transfers).
+    Returns display name, matched txs, net discretionary spend total, and all-category
+    net total (for share % when drilling into Bills/Savings/Transfers).
     """
     target = name.strip() or "Uncategorised"
     target_is_fixed = _normalize_category(target) in NON_DISCRETIONARY_CATEGORIES
@@ -881,18 +961,19 @@ def _category_outflows(
 
     for tx in txs:
         amount = tx.amount or Decimal("0.00")
-        if amount >= 0:
+        if amount == 0 or is_income_credit(tx):
             continue
-        abs_amount = abs(amount)
-        total_outflows += abs_amount
+
+        contrib = _signed_spend_contribution(amount)
+        total_outflows += contrib
         if not (discretionary and is_non_discretionary(tx, bill_keys)):
-            total_discretionary += abs_amount
+            total_discretionary += contrib
 
         cat = _category_label(tx.category)
         if cat != target:
             continue
 
-        # When drilling into a category, include that category's own outflows even if
+        # When drilling into a category, include that category's own outflows/refunds even if
         # it is Bills/Savings/Transfers; still drop Upcoming Bill merchants elsewhere.
         if discretionary and not target_is_fixed and is_non_discretionary(tx, bill_keys):
             continue
@@ -901,6 +982,10 @@ def _category_outflows(
         if tx.category:
             display_name = tx.category
 
+    if total_discretionary < 0:
+        total_discretionary = Decimal("0.00")
+    if total_outflows < 0:
+        total_outflows = Decimal("0.00")
     return display_name, matched, total_discretionary, total_outflows
 
 
@@ -939,10 +1024,10 @@ def category_detail(
     if not period_matched and not window_matched:
         return None
 
-    total = sum(
-        (abs(t.amount or Decimal("0.00")) for t in period_matched), Decimal("0.00")
-    )
-    count = len(period_matched)
+    total = _net_spend(period_matched)
+    if total < 0:
+        total = Decimal("0.00")
+    count = sum(1 for t in period_matched if (t.amount or Decimal("0.00")) < 0)
     avg = (
         (total / Decimal(count)).quantize(Decimal("0.01"))
         if count
@@ -953,10 +1038,14 @@ def category_detail(
 
     merch: dict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
     for tx in period_matched:
-        merch[tx.merchant or "Unknown"] += abs(tx.amount or Decimal("0.00"))
+        amount = tx.amount or Decimal("0.00")
+        if amount == 0:
+            continue
+        merch[tx.merchant or "Unknown"] += _signed_spend_contribution(amount)
     by_merchant = [
         NamedTotal(name=k, total=v)
         for k, v in sorted(merch.items(), key=lambda item: item[1], reverse=True)[:top_n]
+        if v > 0
     ]
 
     share = None
@@ -970,14 +1059,15 @@ def category_detail(
         _, prev_matched, _, _ = _category_outflows(
             db, display_name, prior_start, prior_end, discretionary=discretionary
         )
-        prev_total = sum(
-            (abs(t.amount or Decimal("0.00")) for t in prev_matched),
-            Decimal("0.00"),
-        )
+        prev_total = _net_spend(prev_matched)
+        if prev_total < 0:
+            prev_total = Decimal("0.00")
         previous = _previous_block(
             total=total,
             prev_total=prev_total,
-            prev_count=len(prev_matched),
+            prev_count=sum(
+                1 for t in prev_matched if (t.amount or Decimal("0.00")) < 0
+            ),
             prior_start=prior_start,
             prior_end=prior_end,
         )

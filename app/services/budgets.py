@@ -41,19 +41,31 @@ def list_budgets(db: Session, *, active_only: bool = False) -> list[Budget]:
 def budget_progress(db: Session, today: date | None = None) -> list[BudgetProgress]:
     today = today or date.today()
     start = today.replace(day=1)
+    from app.services.analytics import (
+        _signed_spend_contribution,
+        is_income_credit,
+    )
+
     txs = (
         db.query(Transaction)
-        .filter(Transaction.date >= start, Transaction.date <= today, Transaction.amount < 0)
+        .filter(Transaction.date >= start, Transaction.date <= today)
         .all()
     )
     spent_map: dict[str, Decimal] = {}
     for tx in txs:
+        amount = tx.amount or Decimal("0.00")
+        if amount == 0 or is_income_credit(tx):
+            continue
         cat = tx.category or "Uncategorised"
-        spent_map[cat] = spent_map.get(cat, Decimal("0.00")) + abs(tx.amount)
+        spent_map[cat] = spent_map.get(cat, Decimal("0.00")) + _signed_spend_contribution(
+            amount
+        )
 
     result: list[BudgetProgress] = []
     for b in list_budgets(db, active_only=True):
         spent = spent_map.get(b.category, Decimal("0.00"))
+        if spent < 0:
+            spent = Decimal("0.00")
         remaining = b.monthly_limit - spent
         pct = (
             (spent / b.monthly_limit * Decimal("100")).quantize(Decimal("0.1"))

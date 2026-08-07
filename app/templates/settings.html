@@ -13,7 +13,7 @@
     <input id="current_balance" name="current_balance" value="{{ settings.current_balance }}" required>
     <p class="hint">
       Set this once to match Monzo (or when correcting drift). Sync only adjusts it for
-      transactions after this was last changed
+      transactions after the balance watermark
       {% if settings.balance_updated_at %}(as of {{ settings.balance_updated_at | shortdatetime }}){% endif %}.
     </p>
 

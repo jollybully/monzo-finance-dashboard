@@ -39,10 +39,21 @@ def seed_balance(
     return row
 
 
-def apply_balance_delta(db: Session, delta: Decimal) -> AccountSettings:
+def apply_balance_delta(
+    db: Session,
+    delta: Decimal,
+    *,
+    as_of: datetime | None = None,
+) -> AccountSettings:
+    """Apply a signed delta. Watermark advances to as_of (max applied tx time), not wall clock."""
     row = get_or_create_settings(db)
     row.current_balance = (row.current_balance or Decimal("0.00")) + delta
-    row.balance_updated_at = datetime.now(timezone.utc)
+    if as_of is not None:
+        if as_of.tzinfo is None:
+            as_of = as_of.replace(tzinfo=timezone.utc)
+        # Never move the watermark backwards (keeps seed / prior max intact).
+        if row.balance_updated_at is None or as_of > row.balance_updated_at:
+            row.balance_updated_at = as_of
     db.commit()
     db.refresh(row)
     return row

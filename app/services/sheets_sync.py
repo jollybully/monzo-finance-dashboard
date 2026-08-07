@@ -160,6 +160,14 @@ def sync_transactions(db: Session) -> SyncResult:
     updated = 0
     balance_delta = Decimal("0.00")
     skipped_balance = 0
+    # Watermark must track the latest *applied* tx time, not wall-clock sync time,
+    # or late sheet rows with earlier timestamps get inserted but skipped for balance.
+    max_applied_tx_dt: datetime | None = None
+
+    def _tx_datetime(d: date, t: time | None) -> datetime:
+        return datetime.combine(d, t or time.min, tzinfo=app_tz).astimezone(
+            timezone.utc
+        )
 
     for raw in rows[1:]:
         row = [str(c) if c is not None else "" for c in raw]
@@ -180,6 +188,7 @@ def sync_transactions(db: Session) -> SyncResult:
         currency = _cell(row, column_map.get("currency")) or "GBP"
         notes = _cell(row, column_map.get("notes")) or None
         description = _cell(row, column_map.get("description")) or None
+        tx_dt = _tx_datetime(tx_date, tx_time)
 
         current = existing.get(tx_id)
         if current is None:
@@ -200,14 +209,12 @@ def sync_transactions(db: Session) -> SyncResult:
             inserted += 1
             if balance_as_of is None:
                 skipped_balance += 1
+            elif tx_dt > balance_as_of:
+                balance_delta += amount
+                if max_applied_tx_dt is None or tx_dt > max_applied_tx_dt:
+                    max_applied_tx_dt = tx_dt
             else:
-                tx_dt = datetime.combine(
-                    tx_date, tx_time or time.min, tzinfo=app_tz
-                ).astimezone(timezone.utc)
-                if tx_dt > balance_as_of:
-                    balance_delta += amount
-                else:
-                    skipped_balance += 1
+                skipped_balance += 1
             continue
 
         dirty = False
@@ -224,21 +231,28 @@ def sync_transactions(db: Session) -> SyncResult:
             if getattr(current, field) != value:
                 setattr(current, field, value)
                 dirty = True
-        # Amount changes are unusual; do not re-apply to balance to avoid drift.
+        # Card settlements change amount after insert — re-apply the diff so balance
+        # tracks Monzo (auth −£40 → settle −£52 must move balance by −£12).
         if current.amount != amount:
-            logger.warning(
-                "Amount changed for %s (%s -> %s); balance not adjusted",
+            amount_diff = amount - (current.amount or Decimal("0.00"))
+            logger.info(
+                "Amount changed for %s (%s -> %s); applying balance diff %s",
                 tx_id,
                 current.amount,
                 amount,
+                amount_diff,
             )
             current.amount = amount
             dirty = True
+            if balance_as_of is not None:
+                balance_delta += amount_diff
+                if max_applied_tx_dt is None or tx_dt > max_applied_tx_dt:
+                    max_applied_tx_dt = tx_dt
         if dirty:
             updated += 1
 
     if balance_delta != 0:
-        apply_balance_delta(db, balance_delta)
+        apply_balance_delta(db, balance_delta, as_of=max_applied_tx_dt)
     else:
         db.commit()
 

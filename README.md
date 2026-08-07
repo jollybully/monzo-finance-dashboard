@@ -156,9 +156,9 @@ docker compose logs -f lidl-sync
 4. **Bills** — add rent and other commitments, or **Scan transactions** and accept suggestions. Weekly bills are reserved for *every* occurrence until payday. Name each bill to match Monzo’s **Name** column (accepting a suggestion does this automatically) so those merchants drop out of discretionary spend and top-merchant rankings.
 5. Optionally set **Budgets** by Monzo category.
 
-Spend digests (overview, spending, emails, insights) treat Monzo **Bills**, **Savings**, and **Transfers** categories — plus merchants that match active Upcoming Bills — as non-discretionary. Budgets and bill detection still see the full outflow history. Keep pot top-ups and internal transfers in Savings or Transfers in Monzo.
+Spend digests (overview, spending, emails, insights) treat Monzo **Bills**, **Savings**, and **Transfers** categories — plus merchants that match active Upcoming Bills — as non-discretionary. Card-payment refunds (positive amounts outside those categories) net against spend so merchant totals reflect reality. Budgets and bill detection still see the full history. Keep pot top-ups and internal transfers in Savings or Transfers in Monzo.
 
-After that, sync runs on `SYNC_INTERVAL_MINUTES` (default 15). Balance only moves for transactions *after* you last updated the seeded balance.
+After that, sync runs on `SYNC_INTERVAL_MINUTES` (default 15). Balance only moves for transactions *after* the balance watermark (last applied transaction time, or when you last seeded).
 
 ---
 
@@ -262,7 +262,7 @@ This repo is meant to be public; your money data is not.
 |---------|--------|
 | Sync fails / no rows | Sheet shared with SA email? Correct `GOOGLE_SHEET_ID` / tab name in `GOOGLE_SHEET_RANGE`? JSON at `credentials/service-account.json`? |
 | Digests not arriving | SMTP and/or Pushover filled in? `REPORT_*_ENABLED`? App timezone? Try **Reports → Send daily** |
-| Balance looks wrong | Re-seed **Current balance** in Settings; historical sync won’t rewrite a seeded balance |
+| Balance looks wrong | Re-seed **Current balance** in Settings to match Monzo. Sync advances the watermark to the latest *applied* transaction time (not wall clock); late sheet rows and card settlement amount changes are applied. Existing drift does not self-heal. |
 | Port 8000 in use | Change the host port in `docker-compose.yml` (`"8001:8000"`) |
 
 ---
