@@ -145,6 +145,11 @@ def _advance_bill_after_payment(bill: UpcomingBill, paid_on: date) -> bool:
     return False
 
 
+# Last-Friday payday vs 1st-of-month rent can be up to 7 days early.
+_EARLY_PAY_DAYS = 14
+_LATE_PAY_DAYS = 3
+
+
 def reconcile_paid_bills(db: Session, today: date | None = None) -> int:
     """Advance Upcoming Bills when a matching Monzo outflow is found near the due date.
 
@@ -159,7 +164,7 @@ def reconcile_paid_bills(db: Session, today: date | None = None) -> int:
         db.query(UpcomingBill)
         .filter(
             UpcomingBill.active.is_(True),
-            UpcomingBill.next_due_date <= today + timedelta(days=3),
+            UpcomingBill.next_due_date <= today + timedelta(days=_EARLY_PAY_DAYS),
         )
         .order_by(UpcomingBill.amount.desc(), UpcomingBill.id)
         .all()
@@ -167,7 +172,7 @@ def reconcile_paid_bills(db: Session, today: date | None = None) -> int:
     if not bills:
         return 0
 
-    window_start = today - timedelta(days=14)
+    window_start = today - timedelta(days=_EARLY_PAY_DAYS)
     txs = (
         db.query(Transaction)
         .filter(
@@ -188,8 +193,8 @@ def reconcile_paid_bills(db: Session, today: date | None = None) -> int:
 
     for bill in bills:
         due = bill.next_due_date
-        match_start = due - timedelta(days=5)
-        match_end = due + timedelta(days=3)
+        match_start = due - timedelta(days=_EARLY_PAY_DAYS)
+        match_end = due + timedelta(days=_LATE_PAY_DAYS)
         best: tuple[int, Transaction] | None = None  # score, tx
 
         for tx in txs:
