@@ -505,14 +505,24 @@ def get_cashflow_forecast(
 
 @mcp.tool()
 def get_day_or_mtd_stats(mode: str = "mtd", day: str | None = None) -> dict[str, Any]:
-    """Quick stats: mode='mtd' for calendar month-to-date, mode='day' for a single day (default yesterday)."""
+    """Quick stats: mode='mtd' for calendar month-to-date, mode='day' for a single day.
+
+    mode='day' with no day means TODAY. Pass day='YYYY-MM-DD' for an earlier day (the
+    daily digest passes yesterday explicitly). The reply always echoes resolved_date,
+    so a caller can never mistake another day's total for today's.
+    """
     db = _db()
     try:
         today = date.today()
         if mode == "day":
-            target = _parse_date(day, default=today - timedelta(days=1))
+            target = _parse_date(day, default=today)
             stats = day_stats(db, target, top_n=8)
-            return {"mode": "day", "stats": _period_stats_dict(stats)}
+            return {
+                "mode": "day",
+                "resolved_date": target.isoformat(),
+                "is_today": target == today,
+                "stats": _period_stats_dict(stats),
+            }
         stats = month_to_date_stats(db, today)
         return {"mode": "mtd", "stats": _period_stats_dict(stats)}
     finally:
