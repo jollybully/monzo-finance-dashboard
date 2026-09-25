@@ -392,11 +392,32 @@ def get_category_detail(
 
 @mcp.tool()
 def get_budget_status() -> dict[str, Any]:
-    """Calendar-month budget progress (all outflows in each category, including bills)."""
+    """Calendar-month budget progress (all outflows in each category, including bills).
+
+    Returns one row per CONFIGURED budget. An empty `budgets` list means no budgets are
+    configured at all - it does NOT mean the month has no spending or no data. Never
+    report an empty list as "budget data is unavailable"; for a general "how am I doing
+    on money" question use get_day_or_mtd_stats, get_safe_spend or get_spending_snapshot
+    instead, and use this tool only when the user asks about a budget they have set.
+    """
     db = _db()
     try:
         rows = budget_progress(db)
-        return {"budgets": to_jsonable(rows)}
+        payload: dict[str, Any] = {"budgets": to_jsonable(rows)}
+        # A voice agent asked "how am I doing on money this month", picked this tool, and
+        # spoke {"budgets": []} as "your budget data for this month isn't available".
+        # Empty here means unconfigured, so name that and point at the tools that answer.
+        if not rows:
+            payload["budgets_configured"] = False
+            payload["hint"] = (
+                "No budgets are configured, so this tool has nothing to report. This does "
+                "NOT mean spending data is missing. For spending or 'how am I doing on "
+                "money' questions call get_day_or_mtd_stats, get_safe_spend or "
+                "get_spending_snapshot."
+            )
+        else:
+            payload["budgets_configured"] = True
+        return payload
     finally:
         db.close()
 
