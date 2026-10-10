@@ -51,6 +51,9 @@ Rules:
   then drill with get_category_detail / get_merchant_detail.
 - For week-to-week discretionary spend, use compare_weeks or compare_two_weeks;
   prefer avg_daily when the current week is still open.
+- Days can be passed in words: day='today', day='yesterday', day='the day before
+  yesterday', or as 'YYYY-MM-DD'. mode='day' with no day is TODAY, so a question
+  about another day always needs day -- never omit it and speak the default.
 - Optional receipt tools (get_receipt_list / get_receipt_detail /
   get_receipt_item_spend) expose Lidl (and later other) line items. Receipt
   totals enrich Monzo merchant spend — do not double-count them as extra spend.
@@ -66,12 +69,27 @@ def _db() -> Session:
     return SessionLocal()
 
 
+# Day words a caller may pass where a YYYY-MM-DD is accepted. "yesterday" exists so a
+# caller never has to compute a calendar date (and so it cannot get the year wrong).
+_RELATIVE_DAYS: dict[str, int] = {
+    "today": 0,
+    "now": 0,
+    "yesterday": -1,
+    "the day before yesterday": -2,
+    "day before yesterday": -2,
+    "tomorrow": 1,
+}
+
+
 def _parse_date(value: str | None, *, default: date | None = None) -> date:
     if value is None or value == "":
         if default is None:
             raise ValueError("date is required (YYYY-MM-DD)")
         return default
-    return date.fromisoformat(value)
+    key = str(value).strip().lower()
+    if key in _RELATIVE_DAYS:
+        return date.today() + timedelta(days=_RELATIVE_DAYS[key])
+    return date.fromisoformat(key)
 
 
 def _default_range(db: Session) -> tuple[date, date]:
@@ -507,22 +525,32 @@ def get_cashflow_forecast(
 def get_day_or_mtd_stats(mode: str = "mtd", day: str | None = None) -> dict[str, Any]:
     """Quick stats: mode='mtd' for calendar month-to-date, mode='day' for a single day.
 
-    mode='day' with no day means TODAY. Pass day='YYYY-MM-DD' for an earlier day (the
-    daily digest passes yesterday explicitly). The reply always echoes resolved_date,
-    so a caller can never mistake another day's total for today's.
+    mode='day' with no day means TODAY. For any OTHER day you MUST pass day -- in words
+    ('yesterday', 'the day before yesterday') or as 'YYYY-MM-DD'. Never answer a question
+    about another day by omitting day: the reply echoes resolved_date, is_today and
+    day_source, and a call that omitted day carries a warning saying the numbers are TODAY's.
     """
     db = _db()
     try:
         today = date.today()
         if mode == "day":
+            supplied = day is not None and str(day).strip() != ""
             target = _parse_date(day, default=today)
             stats = day_stats(db, target, top_n=8)
-            return {
+            payload = {
                 "mode": "day",
                 "resolved_date": target.isoformat(),
                 "is_today": target == today,
+                "day_source": "argument" if supplied else "defaulted_to_today",
                 "stats": _period_stats_dict(stats),
             }
+            if not supplied:
+                payload["warning"] = (
+                    "No day argument was supplied, so this is TODAY's total. If the user "
+                    "asked about another day (for example yesterday), call again with "
+                    "day='yesterday'."
+                )
+            return payload
         stats = month_to_date_stats(db, today)
         return {"mode": "mtd", "stats": _period_stats_dict(stats)}
     finally:
